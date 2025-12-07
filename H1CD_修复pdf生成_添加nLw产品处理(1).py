@@ -173,7 +173,7 @@ def run_check(config):
         os.chmod(output_dir, 0o664)  # 设置文件权限为可读写
 
         # 步骤13：生成报告
-   
+
         oc_file=os.path.join(sat_input_dir, config[satellite_type]['l2a_file'])
         beijing_time = extract_datetime(oc_file)
         time_str = beijing_time.strftime('%Y%m%d%H%M%S')
@@ -187,6 +187,11 @@ def run_check(config):
         coldata_path = './output/05_reports'
         output_path = './output/05_reports'
 
+        # 记录报告生成前已存在的docx文件
+        existing_docx_files = set()
+        if os.path.exists(output_path):
+            existing_docx_files = set([f for f in os.listdir(output_path) if f.endswith('.docx')])
+
         if source_type == 'XC':
 
             step_xc_report(extracted_data, input_temp, input_img, coldata_path, output_path, satellite_type, source_type,space_size)
@@ -195,8 +200,17 @@ def run_check(config):
 
             step_report(extracted_data, input_temp, input_img, coldata_path, output_path, satellite_type, source_type, space_size,time_threshold)
 
+        # 找出本次新生成的docx文件
+        new_docx_files = []
+        if os.path.exists(output_path):
+            current_docx_files = set([f for f in os.listdir(output_path) if f.endswith('.docx')])
+            new_docx_files = list(current_docx_files - existing_docx_files)
 
-        word_to_pdf(output_path, output_path)
+        if new_docx_files:
+            print(f"\n本次生成了 {len(new_docx_files)} 个报告文件: {', '.join(new_docx_files)}")
+            word_to_pdf(output_path, output_path, new_docx_files)
+        else:
+            print("\n警告: 未检测到新生成的docx报告文件")
 
         return True
     except Exception as e:
@@ -4396,45 +4410,60 @@ def determine_target_folder(filename):
 
     # 默认返回None，表示不移动该文件
     return "02_reference_preprocess"
-def word_to_pdf(input_dir, output_dir):
+def word_to_pdf(input_dir, output_dir, specific_files=None):
     """
-    将指定目录中的所有 .docx 文件转换为 PDF 文件。
+    将指定目录中的 .docx 文件转换为 PDF 文件。
 
     参数:
         input_dir (str): 包含 .docx 文件的输入目录。
         output_dir (str): 保存转换后的 PDF 文件的输出目录。
+        specific_files (list): 可选,指定要转换的docx文件名列表。如果为None,则转换所有docx文件。
     """
     # 确保输出目录存在
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    
-    # 遍历输入目录中的所有文件
-    for filename in os.listdir(input_dir):
-        # 检查文件是否以 .docx 结尾
-        if filename.endswith(".docx"):
-            # 构建输入文件的完整路径
-            input_file = os.path.join(input_dir, filename)
-            # 构建输出文件的完整路径（将 .docx 替换为 .pdf）
-            output_file = os.path.join(output_dir, filename.replace(".docx", ".pdf"))
-            
-            # 构建 LibreOffice 命令
-            cmd = [
-                'libreoffice', 
-                '--headless', 
-                '--convert-to', 'pdf', 
-                input_file, 
-                '--outdir', output_dir
-            ]
-            
-            # 运行命令
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            
-            # 检查转换是否成功
-            if result.returncode == 0:
-                print(f"成功转换：{input_file} -> {output_file}")
-            else:
-                print(f"转换失败：{input_file}")
-                print("错误信息：", result.stderr.decode())
+
+    # 确定要处理的文件列表
+    if specific_files is not None:
+        # 只处理指定的文件
+        files_to_convert = [f for f in specific_files if f.endswith(".docx")]
+        print(f"\n仅转换本次生成的 {len(files_to_convert)} 个docx文件")
+    else:
+        # 处理目录中所有的docx文件(向后兼容)
+        files_to_convert = [f for f in os.listdir(input_dir) if f.endswith(".docx")]
+        print(f"\n转换目录中所有 {len(files_to_convert)} 个docx文件")
+
+    # 遍历要转换的文件
+    for filename in files_to_convert:
+        # 构建输入文件的完整路径
+        input_file = os.path.join(input_dir, filename)
+
+        # 检查文件是否存在
+        if not os.path.exists(input_file):
+            print(f"警告: 文件不存在,跳过: {input_file}")
+            continue
+
+        # 构建输出文件的完整路径（将 .docx 替换为 .pdf）
+        output_file = os.path.join(output_dir, filename.replace(".docx", ".pdf"))
+
+        # 构建 LibreOffice 命令
+        cmd = [
+            'libreoffice',
+            '--headless',
+            '--convert-to', 'pdf',
+            input_file,
+            '--outdir', output_dir
+        ]
+
+        # 运行命令
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        # 检查转换是否成功
+        if result.returncode == 0:
+            print(f"成功转换：{filename} -> {filename.replace('.docx', '.pdf')}")
+        else:
+            print(f"转换失败：{filename}")
+            print("错误信息：", result.stderr.decode())
 
 
 
