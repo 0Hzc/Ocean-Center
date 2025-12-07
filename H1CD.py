@@ -3729,7 +3729,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
     else:
         raise ValueError(f"Unsupported source type: {source_org_type}")
     
-    # print(f"tttttttttttttttttttt\n")    
+    # print(f"tttttttttttttttttttt\n")
 
     def calc_metric(coldata_path, reference, var_name, datestr, satellite_type):
         """
@@ -3742,15 +3742,21 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         :param satellite_type: 卫星类型
         :return: bias, rms, n
         """
-        filepath = os.path.join(coldata_path, f'{satellite_type}_COCTS_{reference}_{var_name}_report_{datestr}.txt')
-        if not os.path.exists(filepath):
-            files = os.listdir(coldata_path)
-            pattern = f'{satellite_type}_COCTS_{reference}_{var_name}_report_{datestr}'
-            matching_files = [f for f in files if pattern in f]
-            if matching_files:
-                filepath = os.path.join(coldata_path, matching_files[0])
-            else:
-                raise FileNotFoundError(f"找不到匹配的报告文件: {pattern}")
+        # 实际的报告文件格式：report_{satellite}_{reference}_{var_name}_{timestamp}.txt
+        # 首先尝试匹配包含日期字符串的文件
+        files = os.listdir(coldata_path)
+        pattern = f'report_{satellite_type}_{reference}_{var_name}_{datestr}'
+        matching_files = [f for f in files if pattern in f and f.endswith('.txt')]
+
+        if not matching_files:
+            # 如果没找到，尝试旧的命名格式
+            old_pattern = f'{satellite_type}_COCTS_{reference}_{var_name}_report_{datestr}'
+            matching_files = [f for f in files if old_pattern in f and f.endswith('.txt')]
+
+        if not matching_files:
+            raise FileNotFoundError(f"找不到匹配的报告文件。\n查找模式: report_{satellite_type}_{reference}_{var_name}_{datestr}*.txt\n目录: {coldata_path}\n已有文件: {[f for f in files if f.endswith('.txt')]}")
+
+        filepath = os.path.join(coldata_path, matching_files[0])
 
         bias = None
         rms = None
