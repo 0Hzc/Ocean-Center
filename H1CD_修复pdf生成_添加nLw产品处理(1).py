@@ -248,18 +248,30 @@ def process_hy_data(source_type,hy_file_l2a, hy_file_l2b, output_dir):
             year = int(h5_file['Scan Line Attributes/Year'][0])
             day = int(h5_file['Scan Line Attributes/Day'][0])
             millisecond = int(h5_file['Scan Line Attributes/Millisecond'][0])
-            
+
             # 转换为北京时间
             utc_time = datetime(year, 1, 1) + timedelta(days=day-1, milliseconds=millisecond)
             beijing_time = utc_time + timedelta(hours=8)
             time_str = beijing_time.strftime('%Y%m%d%H%M%S')
 
+            # 获取数据维度并保存
+            lat_data = h5_file['Navigation Data/Latitude'][:]
+            data_shape = lat_data.shape
+            rows, cols = data_shape[0], data_shape[1]
+            print(f"检测到数据维度: {rows} x {cols}")
+
+            # 保存维度信息到文件,供后续步骤使用
+            dimensions_file = os.path.join(output_dir, f'dimensions_{time_str}.txt')
+            with open(dimensions_file, 'w') as f:
+                f.write(f"{rows},{cols}\n")
+            print(f"数据维度已保存到: {dimensions_file}")
+
             # 保存基础数据
-            save_data_to_txt(h5_file['Navigation Data/Latitude'][:], 
+            save_data_to_txt(lat_data,
                            os.path.join(output_dir, f'{prefix}_lat_{time_str}.txt'))
-            save_data_to_txt(h5_file['Navigation Data/Longitude'][:], 
+            save_data_to_txt(h5_file['Navigation Data/Longitude'][:],
                            os.path.join(output_dir, f'{prefix}_lon_{time_str}.txt'))
-            save_data_to_txt(h5_file['Geophysical Data/l2_flags'][:], 
+            save_data_to_txt(h5_file['Geophysical Data/l2_flags'][:],
                            os.path.join(output_dir, f'{prefix}_flag_{time_str}.txt'))
 
             # 保存反射率数据
@@ -597,11 +609,28 @@ def extract_file_prefix(filename):
     elif first_five_chars == 'JPSS_':
         return 'JPSS'
 
-def generate_flag_from_data(data_file, satellite_type):
+def generate_flag_from_data(data_file, satellite_type, output_dir=None):
     try:
         data = np.genfromtxt(data_file, delimiter=None)
+
+        # 如果数据是一维的,尝试重塑
+        if data.ndim == 1 and output_dir:
+            # 尝试从维度文件读取行列数
+            dimension_files = [f for f in os.listdir(output_dir) if f.startswith('dimensions_')]
+            if dimension_files:
+                dimension_file = os.path.join(output_dir, dimension_files[0])
+                try:
+                    with open(dimension_file, 'r') as f:
+                        dims = f.read().strip().split(',')
+                        rows, cols = int(dims[0]), int(dims[1])
+                        if data.size == rows * cols:
+                            data = data.reshape(rows, cols)
+                            print(f"使用维度文件重塑数据: {rows} x {cols}")
+                except Exception as e:
+                    print(f"读取维度文件失败: {e}")
+
         flag = np.zeros_like(data, dtype=np.int32)
-        
+
         # 添加统计信息
         filename = os.path.basename(data_file)
         # 根据不同产品类型处理无效值
@@ -613,7 +642,7 @@ def generate_flag_from_data(data_file, satellite_type):
             flag[np.isnan(data)] = 1
 
         return flag
-        
+
     except Exception as e:
         print(f"生成标识矩阵时出错: {str(e)}")
         traceback.print_exc()
@@ -731,94 +760,125 @@ def process_xc_flagcheck_data(input_dir, output_dir):
 
 def HY_flag_create(satellite_type,input_dir,window_size):
     try:
-        print(f"\n开始执行{satellite_type}_flag_create函数\n")
+        print(f"\n开始执行 {satellite_type}_flag_create 函数 (对每个产品单独生成flag)\n")
         flag_matrices = {}
-        
+
         # 检查目录中的文件
         all_files = os.listdir(input_dir)
-      
-        # 处理所有HY_flag文件
-        for filename in all_files:        
-            if filename.startswith(f'{satellite_type}_flag_') and filename.endswith('.txt'):
-                print(f"\n开始处理flag文件: {filename}")
-                flag_file = os.path.join(input_dir, filename)
-                
-                # 读取flag文件
-                flag_matrix = np.genfromtxt(flag_file, delimiter=None, dtype=np.int32)
-                # print(f"原始flag文件统计:")
-                # print(f"- 数据形状: {flag_matrix.shape}")
-                # print(f"- 唯一值: {np.unique(flag_matrix)}")      
 
-                # 提取时间戳部分
-                time_id = filename.split('_')[2].replace('.txt', '')
-             
-                # 初始化flag矩阵
-                FLAG = np.zeros_like(flag_matrix, dtype=np.int32)
-                
-                # 检查flag文件中的特定位
-                mask = ((flag_matrix & (1 << 8)) | (flag_matrix & (1 << 22))) != 0
-                FLAG[mask] = 1
-                # print(f"\n位运算后的FLAG统计:")
-                # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
-                # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
-                
-                # 查找对应的产品文件
-                for product_file in all_files:
-                    if 'lon' in product_file or 'lat' in product_file:
-                        continue
-                    if product_file.startswith(f'{satellite_type}_') and time_id in product_file:
-                        print(f"\n处理产品文件: {product_file}")  # 新增：显示当前处理的产品文件
+        # 读取数据维度
+        dimension_files = [f for f in all_files if f.startswith('dimensions_')]
+        rows, cols = None, None
+        if dimension_files:
+            dimension_file = os.path.join(input_dir, dimension_files[0])
+            try:
+                with open(dimension_file, 'r') as f:
+                    dims = f.read().strip().split(',')
+                    rows, cols = int(dims[0]), int(dims[1])
+                    print(f"从维度文件读取到数据维度: {rows} x {cols}")
+            except Exception as e:
+                print(f"读取维度文件失败: {e}")
 
-                        if os.path.exists(os.path.join(input_dir, product_file)):
-                            # 记录处理前的1的数量
-                            ones_before = np.sum(FLAG == 1)
-                            
-                            temp_matrix = generate_flag_from_data(
-                                os.path.join(input_dir, product_file), 
-                                satellite_type
-                            )
-                            if temp_matrix is not None and len(temp_matrix) == len(flag_matrix):
-                                FLAG = np.logical_or(FLAG, temp_matrix).astype(np.int32)
-                                
-                                # 计算并显示变化
-                                ones_after = np.sum(FLAG == 1)
-                                new_ones = ones_after - ones_before
-                                # print(f"\n产品 {product_file} 的影响:")
-                                # print(f"- 处理前1的数量: {ones_before}")
-                                # print(f"- 处理后1的数量: {ones_after}")
-                                # print(f"- 该产品新增1的数量: {new_ones}")
-                                # print(f"- 占总像素的比例: {(new_ones / len(FLAG)) * 100:.2f}%")
-                                
-                            #     if new_ones > len(FLAG) * 0.5:  # 如果新增的1超过50%
-                            #         print(f"警告: 产品 {product_file} 导致大量像素变为1!")
-                            # else:
-                            #     print(f"警告：产品 {product_file} 的数据长度与flag文件不匹配")
+        # 如果没有读取到维度文件,尝试猜测(向后兼容)
+        if rows is None or cols is None:
+            print("警告: 未找到维度文件,将尝试猜测数据维度")
 
-                # print(f"\n应用空间窗口前的FLAG统计:")
-                # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
-                # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
-                
-                # 应用空间窗口1
+        # 查找所有flag文件
+        flag_files = [f for f in all_files
+                     if f.startswith(f'{satellite_type}_flag_') and f.endswith('.txt')
+                     and 'flag1' not in f]
+
+        if not flag_files:
+            print(f"警告: 未找到{satellite_type}_flag文件")
+            return flag_matrices
+
+        # 对每个flag文件处理
+        for flag_filename in flag_files:
+            print(f"\n开始处理 l2_flag 文件: {flag_filename}")
+            flag_file = os.path.join(input_dir, flag_filename)
+
+            # 读取原始 l2_flags 数据
+            flag_matrix = np.genfromtxt(flag_file, delimiter=None, dtype=np.int32)
+
+            # 如果没有从文件读取到维度,尝试猜测
+            if rows is None or cols is None:
                 total_size = flag_matrix.size
                 for i in range(1000, 6000):
                     if total_size % i == 0:
                         rows = i
                         cols = total_size // i
                         break
-                FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
+                print(f"猜测的数据维度: {rows} x {cols}")
 
-                # print(f"\n应用空间窗口后的FLAG统计:")
-                # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
-                # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
+            # 重塑为二维数组
+            flag_matrix = flag_matrix.reshape(rows, cols) if flag_matrix.ndim == 1 else flag_matrix
 
-                # 输出结果
-                output_filename = filename.replace('flag_', 'flag1_')
+            # 从l2_flags提取基础FLAG(陆地和云冰标记)
+            base_flag = np.zeros_like(flag_matrix, dtype=np.int32)
+            mask = ((flag_matrix & (1 << 8)) | (flag_matrix & (1 << 22))) != 0
+            base_flag[mask] = 1
+
+            print(f"基础FLAG(陆地+云冰)中1的数量: {np.sum(base_flag == 1)}, 占比: {np.sum(base_flag == 1) / base_flag.size * 100:.2f}%")
+
+            # 提取时间戳
+            time_id = flag_filename.split('_')[2].replace('.txt', '')
+
+            # 查找所有对应时间的产品文件
+            product_files = [f for f in all_files
+                           if f.startswith(f'{satellite_type}_') and time_id in f
+                           and 'lon' not in f.lower() and 'lat' not in f.lower()
+                           and 'flag' not in f and 'CDOM' not in f]
+
+            print(f"找到 {len(product_files)} 个产品文件需要生成flag1")
+
+            # 为每个产品单独生成flag1文件
+            for product_file in product_files:
+                print(f"\n处理产品: {product_file}")
+
+                # 为该产品创建FLAG副本
+                product_flag = base_flag.copy()
+
+                # 添加该产品特有的无效值标记
+                product_path = os.path.join(input_dir, product_file)
+                if os.path.exists(product_path):
+                    temp_matrix = generate_flag_from_data(
+                        product_path,
+                        satellite_type,
+                        input_dir
+                    )
+                    if temp_matrix is not None and temp_matrix.size == product_flag.size:
+                        # 确保temp_matrix的形状与product_flag一致
+                        if temp_matrix.ndim == 1:
+                            temp_matrix = temp_matrix.reshape(rows, cols)
+
+                        ones_before = np.sum(product_flag == 1)
+                        product_flag = np.logical_or(product_flag, temp_matrix).astype(np.int32)
+                        ones_after = np.sum(product_flag == 1)
+                        new_ones = ones_after - ones_before
+                        print(f"  产品数据新增无效像素: {new_ones}, 占比: {new_ones / product_flag.size * 100:.2f}%")
+                    else:
+                        print(f"  警告: 产品 {product_file} 的数据大小不匹配")
+                        continue
+
+                # 应用空间窗口过滤
+                product_flag = apply_spatial_window(product_flag, window_size, rows, cols)
+
+                # 提取产品名称 (如 Rrs412, chl_a, sst等)
+                # 产品文件格式: HY1C_{product}_{time}.txt
+                product_name = product_file.replace(f'{satellite_type}_', '').replace(f'_{time_id}.txt', '')
+
+                # 生成输出文件名: HY1C_flag1_{product}_{time}.txt
+                output_filename = f'{satellite_type}_flag1_{product_name}_{time_id}.txt'
                 output_path = os.path.join(input_dir, output_filename)
-                np.savetxt(output_path, FLAG, fmt='%d')
-                print(f"结果已保存到: {output_path}")
 
+                # 保存flag1文件
+                np.savetxt(output_path, product_flag.flatten(), fmt='%d')
+                print(f"  已保存: {output_filename}")
+                print(f"  最终FLAG中1的数量: {np.sum(product_flag == 1)}, 占比: {np.sum(product_flag == 1) / product_flag.size * 100:.2f}%")
+
+        print(f"\n所有{satellite_type}产品的flag1文件已生成完成")
         return flag_matrices
-        
+
     except Exception as e:
         print(f"处理过程中发生错误: {str(e)}")
         traceback.print_exc()
