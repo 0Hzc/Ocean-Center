@@ -4287,6 +4287,11 @@ def determine_target_folder(filename):
 
 
 def step_report(datestr, input_temp, input_img, coldata_path, output_path, satellite_type,source_org_type,space_size,time_size):
+    # 确保输出目录存在
+    os.makedirs(coldata_path, exist_ok=True)
+    os.makedirs(output_path, exist_ok=True)
+    os.makedirs(input_img, exist_ok=True)
+
     # 定义产品配置
     # 定义AQUA_VAR_CONFIG
     AQUA_VAR_CONFIG = {
@@ -4639,6 +4644,11 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
 
 def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, satellite_type,source_org_type,space_size):
+    # 确保输出目录存在
+    os.makedirs(coldata_path, exist_ok=True)
+    os.makedirs(output_path, exist_ok=True)
+    os.makedirs(input_img, exist_ok=True)
+
     # 定义产品配置
     XC_VAR_CONFIG = {
         'sst': {'sources': ['XC'], 'unit': '℃', 'col_values': [25, 1800]},
