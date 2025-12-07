@@ -182,10 +182,10 @@ def run_check(config):
         # print(f"{beijing_time}\n")
         # print(f"{time_str}\n")
         # print(f"{extracted_data}\n")
-        input_temp = './input/05_reports'
-        input_img = './output/04_visualization'
-        coldata_path = './output/05_reports'
-        output_path = './output/05_reports'
+        input_temp = os.path.join(input_dir, '05_reports')
+        input_img = os.path.join(output_dir, '04_visualization')
+        coldata_path = os.path.join(output_dir, '05_reports')
+        output_path = os.path.join(output_dir, '05_reports')
 
         # 记录报告生成前已存在的docx文件
         existing_docx_files = set()

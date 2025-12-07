@@ -192,10 +192,10 @@ def run_check(config):
         organize_files(output_dir, output_dir)
 
         # 步骤13：生成报告
-        input_temp = './input/05_reports'
-        input_img = './output/04_visualization'
-        coldata_path = './output/05_reports'
-        output_path = './output/05_reports'
+        input_temp = os.path.join(input_dir, '05_reports')
+        input_img = os.path.join(output_dir, '04_visualization')
+        coldata_path = os.path.join(output_dir, '05_reports')
+        output_path = os.path.join(output_dir, '05_reports')
         oc_file=os.path.join(sat_input_dir, config[satellite_type]['l2a_file'])
         beijing_time = extract_datetime(oc_file)
         time_str = beijing_time.strftime('%Y%m%d%H%M%S')
