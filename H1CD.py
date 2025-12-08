@@ -3936,18 +3936,31 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
             # 从报告文件中提取时间戳
             timestamp = None
             for source in config['sources']:
-                report_file = os.path.join(coldata_path, f'{satellite_type}_COCTS_{source}_{var_name}_report_{datestr}_*.txt')
                 # 列出目录中的所有文件
                 files = os.listdir(coldata_path)
-                # 查找匹配的文件
-                pattern = f'{satellite_type}_COCTS_{source}_{var_name}_report_{datestr}'
-                matching_files = [f for f in files if pattern in f]
+
+                # 首先尝试新格式：report_{satellite}_{reference}_{var_name}_{datestr}_{time}.txt
+                new_pattern = f'report_{satellite_type}_{source}_{var_name}_{datestr}'
+                matching_files = [f for f in files if new_pattern in f and f.endswith('.txt')]
+
                 if matching_files:
-                    # 从文件名中提取时间戳
-                    parts = matching_files[0].split('_')
-                    if len(parts) > 6:
-                        timestamp = parts[6].replace('.txt', '')
+                    # 从新格式文件名中提取时间戳
+                    # 格式: report_HY1C_TERRA_sst_20250101_120000.txt
+                    parts = matching_files[0].replace('.txt', '').split('_')
+                    if len(parts) >= 5:
+                        # 时间戳是最后一部分
+                        timestamp = parts[-1]
                         break
+                else:
+                    # 尝试旧格式：{satellite}_COCTS_{source}_{var_name}_report_{datestr}_{time}.txt
+                    old_pattern = f'{satellite_type}_COCTS_{source}_{var_name}_report_{datestr}'
+                    matching_files = [f for f in files if old_pattern in f and f.endswith('.txt')]
+                    if matching_files:
+                        # 从旧格式文件名中提取时间戳
+                        parts = matching_files[0].split('_')
+                        if len(parts) > 6:
+                            timestamp = parts[6].replace('.txt', '')
+                            break
 
             images = {}
             for key in image_keys['sct']:
@@ -4245,18 +4258,31 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
             # 从报告文件中提取时间戳
             timestamp = None
             for source in config['sources']:
-                report_file = os.path.join(coldata_path, f'{satellite_type}_COCTS_{source}_{var_name}_report_{datestr}_*.txt')
                 # 列出目录中的所有文件
                 files = os.listdir(coldata_path)
-                # 查找匹配的文件
-                pattern = f'{satellite_type}_COCTS_{source}_{var_name}_report_{datestr}'
-                matching_files = [f for f in files if pattern in f]
+
+                # 首先尝试新格式：report_{satellite}_{reference}_{var_name}_{datestr}_{time}.txt
+                new_pattern = f'report_{satellite_type}_{source}_{var_name}_{datestr}'
+                matching_files = [f for f in files if new_pattern in f and f.endswith('.txt')]
+
                 if matching_files:
-                    # 从文件名中提取时间戳
-                    parts = matching_files[0].split('_')
-                    if len(parts) > 6:
-                        timestamp = parts[6].replace('.txt', '')
+                    # 从新格式文件名中提取时间戳
+                    # 格式: report_HY1C_TERRA_sst_20250101_120000.txt
+                    parts = matching_files[0].replace('.txt', '').split('_')
+                    if len(parts) >= 5:
+                        # 时间戳是最后一部分
+                        timestamp = parts[-1]
                         break
+                else:
+                    # 尝试旧格式：{satellite}_COCTS_{source}_{var_name}_report_{datestr}_{time}.txt
+                    old_pattern = f'{satellite_type}_COCTS_{source}_{var_name}_report_{datestr}'
+                    matching_files = [f for f in files if old_pattern in f and f.endswith('.txt')]
+                    if matching_files:
+                        # 从旧格式文件名中提取时间戳
+                        parts = matching_files[0].split('_')
+                        if len(parts) > 6:
+                            timestamp = parts[6].replace('.txt', '')
+                            break
 
             images = {}
             for key in image_keys['sct']:
