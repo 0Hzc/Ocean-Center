@@ -3723,6 +3723,8 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         'Rrs565': {'sources': ['AQUA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'Rrs670': {'sources': ['AQUA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'AOT': {'sources': ['AQUA'], 'unit': '', 'col_values': [25, 1800]},
+        'TSM': {'sources': ['AQUA'], 'unit': 'mg/L', 'col_values': [25, 1800]},
+        'CDOM': {'sources': ['AQUA'], 'unit': '1/m', 'col_values': [25, 1800]},
     }
 
     # 定义TERRA_VAR_CONFIG
@@ -3736,6 +3738,8 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         'Rrs565': {'sources': ['TERRA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'Rrs670': {'sources': ['TERRA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'AOT': {'sources': ['TERRA'], 'unit': '', 'col_values': [25, 1800]},
+        'TSM': {'sources': ['TERRA'], 'unit': 'mg/L', 'col_values': [25, 1800]},
+        'CDOM': {'sources': ['TERRA'], 'unit': '1/m', 'col_values': [25, 1800]},
     }
 
     # 定义SNPP_VAR_CONFIG
@@ -3748,6 +3752,8 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         'Rrs565': {'sources': ['SNPP'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'Rrs670': {'sources': ['SNPP'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'AOT': {'sources': ['SNPP'], 'unit': '', 'col_values': [25, 1800]},
+        'TSM': {'sources': ['SNPP'], 'unit': 'mg/L', 'col_values': [25, 1800]},
+        'CDOM': {'sources': ['SNPP'], 'unit': '1/m', 'col_values': [25, 1800]},
     }
 
     # 定义JPSS_VAR_CONFIG
@@ -3760,6 +3766,55 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         'Rrs565': {'sources': ['JPSS'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'Rrs670': {'sources': ['JPSS'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'AOT': {'sources': ['JPSS'], 'unit': '', 'col_values': [25, 1800]},
+        'TSM': {'sources': ['JPSS'], 'unit': 'mg/L', 'col_values': [25, 1800]},
+        'CDOM': {'sources': ['JPSS'], 'unit': '1/m', 'col_values': [25, 1800]},
+    }
+
+    # 定义HY1C_VAR_CONFIG（卫星间验证）
+    HY1C_VAR_CONFIG = {
+        'sst': {'sources': ['HY1C'], 'unit': '℃', 'col_values': [25, 1800]},
+        'chl': {'sources': ['HY1C'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
+        'Rrs412': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs443': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs490': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs520': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs565': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs670': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'AOT': {'sources': ['HY1C'], 'unit': '', 'col_values': [25, 1800]},
+        'TSM': {'sources': ['HY1C'], 'unit': 'mg/L', 'col_values': [25, 1800]},
+        'CDOM': {'sources': ['HY1C'], 'unit': '1/m', 'col_values': [25, 1800]},
+    }
+
+    # 定义HY1D_VAR_CONFIG（卫星间验证）
+    HY1D_VAR_CONFIG = {
+        'sst': {'sources': ['HY1D'], 'unit': '℃', 'col_values': [25, 1800]},
+        'chl': {'sources': ['HY1D'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
+        'Rrs412': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs443': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs490': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs520': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs565': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs670': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'AOT': {'sources': ['HY1D'], 'unit': '', 'col_values': [25, 1800]},
+        'TSM': {'sources': ['HY1D'], 'unit': 'mg/L', 'col_values': [25, 1800]},
+        'CDOM': {'sources': ['HY1D'], 'unit': '1/m', 'col_values': [25, 1800]},
+    }
+
+    # 定义HY1E_VAR_CONFIG（卫星间验证）
+    HY1E_VAR_CONFIG = {
+        'sst': {'sources': ['HY1E'], 'unit': '℃', 'col_values': [25, 1800]},
+        'chl': {'sources': ['HY1E'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
+        'Rrs412': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs443': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs490': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs520': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs565': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs670': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'Rrs750': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        'AOT': {'sources': ['HY1E'], 'unit': '', 'col_values': [25, 1800]},
+        'TSM': {'sources': ['HY1E'], 'unit': 'mg/L', 'col_values': [25, 1800]},
+        'CDOM': {'sources': ['HY1E'], 'unit': '1/m', 'col_values': [25, 1800]},
+        'IPAR': {'sources': ['HY1E'], 'unit': 'Einstein/m²/d', 'col_values': [25, 1800]},
     }
 
     # 初始化VAR_CONFIG
@@ -3773,6 +3828,12 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         VAR_CONFIG = SNPP_VAR_CONFIG
     elif source_org_type == 'JPSS':
         VAR_CONFIG = JPSS_VAR_CONFIG
+    elif source_org_type == 'HY1C':
+        VAR_CONFIG = HY1C_VAR_CONFIG
+    elif source_org_type == 'HY1D':
+        VAR_CONFIG = HY1D_VAR_CONFIG
+    elif source_org_type == 'HY1E':
+        VAR_CONFIG = HY1E_VAR_CONFIG
     else:
         raise ValueError(f"Unsupported source type: {source_org_type}")
     
