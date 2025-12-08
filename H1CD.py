@@ -3312,33 +3312,36 @@ def generate_ground_plots(check_type,time_diff_counts, valid_ratio_counts, cv_va
     # 1. 时间差分布饼图
     if any(time_diff_counts.values()):
         plt.figure(figsize=(10, 8))
-        # 生成随机分布的时间差数据
-        sizes = generate_random_distribution()
-        labels = list(time_diff_counts.keys())
-        plt.pie(sizes, labels=labels, autopct='%1.1f%%')
-        plt.title(f"{product_name}时间差分布情况")
-        time_output = os.path.join(output_directory, f"timestastic_{base_name}.jpg")
-        plt.savefig(time_output)
-        plt.close()
-        print(f"生成现场 {product} 时间差分布图")
+        # 使用实际的时间差数据
+        sizes = list(time_diff_counts.values())
+        sizes = [max(0, size) for size in sizes]  # 确保非负
+        if sum(sizes) > 0:
+            labels = list(time_diff_counts.keys())
+            plt.pie(sizes, labels=labels, autopct='%1.1f%%')
+            plt.title(f"{product_name}时间差分布情况")
+            time_output = os.path.join(output_directory, f"timestastic_{base_name}.jpg")
+            plt.savefig(time_output)
+            plt.close()
+            print(f"生成现场 {product} 时间差分布图")
+        else:
+            plt.close()
     
     # 2. 检验结果分布饼图
     if any(difference_counts.values()):
         plt.figure(figsize=(10, 8))
-        # 生成随机分布的检验结果数据
-        if product == 'sst':
-            # 对于SST产品使用5个区间
-            sizes = generate_random_distribution()
+        # 使用实际的检验结果数据
+        sizes = list(difference_counts.values())
+        sizes = [max(0, size) for size in sizes]  # 确保非负
+        if sum(sizes) > 0:
+            labels = list(difference_counts.keys())
+            plt.pie(sizes, labels=labels, autopct='%1.1f%%')
+            plt.title(f"{product_name}检验结果情况")
+            val_output = os.path.join(output_directory, f"valstastic_{base_name}.jpg")
+            plt.savefig(val_output)
+            plt.close()
+            print(f"生成现场 {product} 检验结果分布图")
         else:
-            # 对于其他产品使用预定义的5个区间
-            sizes = generate_random_distribution()
-        labels = list(difference_counts.keys())
-        plt.pie(sizes, labels=labels, autopct='%1.1f%%')
-        plt.title(f"{product_name}检验结果情况")
-        val_output = os.path.join(output_directory, f"valstastic_{base_name}.jpg")
-        plt.savefig(val_output)
-        plt.close()
-        print(f"生成现场 {product} 检验结果分布图")
+            plt.close()
 
     # 在generate_ground_plots函数���添加调试信息
     print(f"SST difference_counts: {difference_counts}")
