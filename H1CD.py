@@ -74,6 +74,25 @@ def run_check(config):
         font_path = font_path.replace('\\', '/')
         sat_input_dir = sat_input_dir.replace('\\', '/')
         reference_input_dir = reference_input_dir.replace('\\', '/')
+
+        from matplotlib import font_manager
+        import matplotlib.pyplot as plt
+
+        print(f"正在尝试加载字体: {font_path}")
+        if os.path.exists(font_path):
+            # 1. 核心：将字体文件加入 Matplotlib 管理器
+            font_manager.fontManager.addfont(font_path)
+            
+            # 2. 设置全局字体为 SimHei
+            plt.rcParams['font.sans-serif'] = ['SimHei']
+            
+            # 3. 解决负号显示为方块的问题
+            plt.rcParams['axes.unicode_minus'] = False
+            
+            print("✅ 字体加载成功！Matplotlib 已锁定 SimHei。")
+        else:
+            print(f"❌ 严重警告：找不到字体文件！路径: {font_path}")
+            print("请检查 config.ini 中的路径是否与 Linux 实际路径完全一致（注意空格和下划线）。")
         
         # 确保输出目录存在
         os.makedirs(output_dir, exist_ok=True)
@@ -182,10 +201,10 @@ def run_check(config):
         # print(f"{beijing_time}\n")
         # print(f"{time_str}\n")
         # print(f"{extracted_data}\n")
-        input_temp = './input/05_reports'
-        input_img = './output/04_visualization'
-        coldata_path = './output/05_reports'
-        output_path = './output/05_reports'
+        input_temp = os.path.join(input_dir, '05_reports')
+        input_img = os.path.join(output_dir, '04_visualization')
+        coldata_path = os.path.join(output_dir, '05_reports')
+        output_path = os.path.join(output_dir, '05_reports')
 
         # 记录报告生成前已存在的docx文件
         existing_docx_files = set()
@@ -3659,6 +3678,11 @@ def calculate_first_page_layout(c, A4, labels, values, table_data):
 
 
 def step_report(datestr, input_temp, input_img, coldata_path, output_path, satellite_type,source_org_type,space_size,time_size):
+    # 确保输出目录存在
+    os.makedirs(coldata_path, exist_ok=True)
+    os.makedirs(output_path, exist_ok=True)
+    os.makedirs(input_img, exist_ok=True)
+
  # 定义产品配置
     # 定义AQUA_VAR_CONFIG
     AQUA_VAR_CONFIG = {
@@ -4003,6 +4027,11 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
     hy1d_cocts_daily_report(datestr, input_temp, input_img, coldata_path, output_path, satellite_type,source_org_type)
 
 def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, satellite_type,source_org_type,space_size):
+    # 确保输出目录存在
+    os.makedirs(coldata_path, exist_ok=True)
+    os.makedirs(output_path, exist_ok=True)
+    os.makedirs(input_img, exist_ok=True)
+
     # 定义产品配置
     XC_VAR_CONFIG = {
         'sst': {'sources': ['XC'], 'unit': '℃', 'col_values': [25, 1800]},
