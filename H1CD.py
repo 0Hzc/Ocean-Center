@@ -4089,6 +4089,10 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
             for placeholder, image_path in replacements['images'].items():
                 _insert_image(doc, placeholder, image_path)
 
+        # 对于现场数据报告，将所有 "XC卫星" 和 "XC" 替换为 "现场"
+        _replace_text(doc, 'XC卫星', '现场')
+        _replace_text(doc, 'XC', '现场')
+
         doc.save(output_docx)
 
     def hy1d_cocts_daily_report(datestr, input_temp, input_img, coldata_path, output_path, satellite_type,source_org_type):
@@ -4270,9 +4274,12 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
             #             print(f"使用替代图片路径: {img_path}")
             #     images[f'{{{{{key}}}}}'] = img_path
 
+            # 对于现场数据，将 'XC' 替换为 '现场'
+            source_display = '现场' if 'XC' in config['sources'] else ', '.join(config['sources'])
+
             replacements['text'].update({
                 '{{satellite_type}}': satellite_type,
-                '{{source_type}}': ', '.join(config['sources']),
+                '{{source_type}}': source_display,
                 '{{unit}}': config['unit']
             })
             replacements['tables'][f'{{{{val_results_{var_name}}}}}'] = val_results
@@ -4393,6 +4400,10 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
         if 'images' in replacements:
             for placeholder, image_path in replacements['images'].items():
                 _insert_image(doc, placeholder, image_path)
+
+        # 对于现场数据报告，将所有 "XC卫星" 和 "XC" 替换为 "现场"
+        _replace_text(doc, 'XC卫星', '现场')
+        _replace_text(doc, 'XC', '现场')
 
         doc.save(output_docx)
 

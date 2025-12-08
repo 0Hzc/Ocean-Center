@@ -2694,6 +2694,10 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
             for placeholder, image_path in replacements['images'].items():
                 _insert_image(doc, placeholder, image_path)
 
+        # 对于现场数据报告，将所有 "XC卫星" 和 "XC" 替换为 "现场"
+        _replace_text(doc, 'XC卫星', '现场')
+        _replace_text(doc, 'XC', '现场')
+
         doc.save(output_docx)
 
 
