@@ -5,6 +5,7 @@ from collections import defaultdict
 import configparser
 import subprocess
 import sys
+import json
 from task_queue import TaskQueue
 
 # 从命令行参数获取 start_time_str 和 end_time_str
@@ -14,6 +15,61 @@ if len(sys.argv) != 3:
 
 start_time_str = sys.argv[1]  # 第一个参数作为 start_time_str
 end_time_str = sys.argv[2]    # 第二个参数作为 end_time_str
+
+# 创建task文件和独立输出目录
+def create_task_file(start_time_str, end_time_str):
+    """在程序启动时立即创建task文件"""
+    task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    task_dir = os.path.join("tasks", task_id)
+    os.makedirs(task_dir, exist_ok=True)
+
+    task_info = {
+        'task_id': task_id,
+        'start_time': start_time_str,
+        'end_time': end_time_str,
+        'created_at': datetime.now().isoformat(),
+        'status': 'running',
+        'output_dir': task_dir
+    }
+
+    task_file = os.path.join(task_dir, 'task_info.json')
+    with open(task_file, 'w', encoding='utf-8') as f:
+        json.dump(task_info, f, indent=2, ensure_ascii=False)
+
+    print(f"\n[Task] 任务已创建:")
+    print(f"  任务ID: {task_id}")
+    print(f"  输出目录: {task_dir}")
+    print(f"  任务文件: {task_file}")
+    print(f"  时间范围: {start_time_str} -> {end_time_str}\n")
+
+    return task_dir, task_file
+
+# 更新task文件状态
+def update_task_status(task_file, status, warnings=None, error=None):
+    """更新task文件的状态信息"""
+    try:
+        with open(task_file, 'r', encoding='utf-8') as f:
+            task_info = json.load(f)
+
+        task_info['status'] = status
+        task_info['completed_at'] = datetime.now().isoformat()
+
+        if warnings:
+            task_info['warnings'] = warnings
+            task_info['warning_count'] = len(warnings)
+
+        if error:
+            task_info['error'] = str(error)
+
+        with open(task_file, 'w', encoding='utf-8') as f:
+            json.dump(task_info, f, indent=2, ensure_ascii=False)
+
+        print(f"\n[Task] 任务状态已更新: {status}")
+    except Exception as e:
+        print(f"\n[Task] 更新任务状态失败: {e}")
+
+# 立即创建task文件
+task_output_dir, task_info_file = create_task_file(start_time_str, end_time_str)
 
 # 初始化 run_warning 字段
 run_warning = []
@@ -321,8 +377,14 @@ if task_queue.acquire(timeout=600, wait=True):
         print("\n运行过程中出现以下警告：")
         for warning in run_warning:
             print(f"run_warning:{warning}")
+        # 更新任务状态为已完成(带警告)
+        update_task_status(task_info_file, 'completed_with_warnings', warnings=run_warning)
     else:
         print("\n运行完成，未发现异常。")
+        # 更新任务状态为成功完成
+        update_task_status(task_info_file, 'completed')
 else:
     print("\n[TaskQueue] 无法获取任务执行权限，退出。")
+    # 更新任务状态为失败
+    update_task_status(task_info_file, 'failed', error='无法获取任务执行权限')
     sys.exit(1)
