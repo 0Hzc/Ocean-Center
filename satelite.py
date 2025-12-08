@@ -1200,8 +1200,23 @@ def step7(input_dir, output_dir,inspection_type):
         files = glob.glob(file_pattern)
         return files[0] if files else None
 
-    def read_valresult(file_path):
-        """读取valresult文件"""
+    def read_dimensions(input_dir):
+        """读取数据维度文件"""
+        try:
+            dimension_files = glob.glob(os.path.join(input_dir, 'dimensions_*.txt'))
+            if dimension_files:
+                with open(dimension_files[0], 'r') as f:
+                    dims = f.read().strip().split(',')
+                    rows, cols = int(dims[0]), int(dims[1])
+                    print(f"读取到数据维度: {rows} x {cols}")
+                    return rows, cols
+            return None, None
+        except Exception as e:
+            print(f"读取维度文件失败: {e}")
+            return None, None
+
+    def read_valresult(file_path, rows=None, cols=None):
+        """读取valresult文件并转换一维索引为二维索引"""
         try:
             print(f"\n开始读取valresult文件: {file_path}")
             with open(file_path, 'r') as f:
@@ -1211,9 +1226,19 @@ def step7(input_dir, output_dir,inspection_type):
                     try:
                         values = line.strip().split()
                         if len(values) >= 4:
-                            row_index = int(float(values[0]))
-                            col_index = int(float(values[1]))
-                            error = float(values[3])  # 使用第4列
+                            # valresult格式: 索引号\tHY值\t参考值\t误差
+                            pixel_index = int(float(values[0])) - 1  # 转换为0-based索引
+                            error = float(values[3])  # 第4列是误差
+
+                            # 将一维索引转换为二维索引
+                            if rows is not None and cols is not None:
+                                row_index = pixel_index // cols
+                                col_index = pixel_index % cols
+                            else:
+                                # 如果没有维度信息，将索引作为行号，列号为0
+                                row_index = pixel_index
+                                col_index = 0
+
                             data.append([row_index, col_index, error])
                         line_count += 1
                     except ValueError as e:
@@ -1505,14 +1530,17 @@ def step7(input_dir, output_dir,inspection_type):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    # 读取数据维度
+    rows, cols = read_dimensions(input_dir)
+
     # 处理所有valresult文件
     valresult_files = glob.glob(os.path.join(input_dir, 'valresult*.txt'))
-    
+
     for valresult_file in valresult_files:
         print(f"正在处理文件: {valresult_file}")
-        
-        # 读取数据
-        valresult_data, _ = read_valresult(valresult_file)
+
+        # 读取数据（传入维度信息）
+        valresult_data, _ = read_valresult(valresult_file, rows, cols)
         lat_file = find_file_with_prefix(input_dir, inspection_type+'_lat')
         lon_file = find_file_with_prefix(input_dir, inspection_type+'_lon')
         
