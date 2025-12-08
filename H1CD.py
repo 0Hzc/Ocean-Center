@@ -4226,7 +4226,7 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
             ]
 
             col_results = [
-                [f'{satellite_type} vs {source}', f"{space_size}*{space_size}*{metrics[source]['Valid_Ratio']}"]
+                [f'{satellite_type} vs {source}', f"{space_size}*{space_size}*{metrics[source]['Valid_Ratio']:.2f}"]
                 for source in config['sources']
             ]
 
