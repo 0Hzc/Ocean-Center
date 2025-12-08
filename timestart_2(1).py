@@ -3,8 +3,9 @@ import re
 from datetime import datetime, timedelta
 from collections import defaultdict
 import configparser
-import subprocess  
+import subprocess
 import sys
+from task_queue import TaskQueue
 
 # 从命令行参数获取 start_time_str 和 end_time_str
 if len(sys.argv) != 3:
@@ -275,40 +276,53 @@ def process_files(file_group):
             run_warning.append(f"Error writing to configuration file {config_file}: {e}")
 
 
-for file_time, files in SAME_TIME_FILES.items():
-    if len(files) > 1:  # 只处理具有多个文件的组
-        process_files((file_time, files))
-            # 调用 H1CD.py 脚本
-        # 在合适的位置读取 config.ini 文件中的 source_type 值
-        if satelite_type in ["HY1C", "HY1D"]:    
-            if source_type in ['HY1C', 'HY1D','HY1E']:
-                try:
-                    subprocess.run(["python", "satelite.py"], check=True)
-                    print("satelite.py 脚本执行完成")
-                except subprocess.CalledProcessError as e:
-                    run_warning.append(f"执行 satelite.py 脚本时出错：{e}")
-            else:
-                try:
-                    subprocess.run(["python", "H1CD.py"], check=True)
-                    print("H1CD.py 脚本执行完成")
-                except subprocess.CalledProcessError as e:
-                    run_warning.append(f"执行 H1CD.py 脚本时出错：{e}")
-        elif satelite_type in ["HY1E"]:
-            if source_type in ['HY1C', 'HY1D','HY1E']:
-                try:
-                    subprocess.run(["python", "satelite.py"], check=True)
-                    print("satelite.py 脚本执行完成")
-                except subprocess.CalledProcessError as e:
-                    run_warning.append(f"执行 satelite.py 脚本时出错：{e}")
-            else:
-                try:
-                    subprocess.run(["python", "docker_setup.py"], check=True)
-                    print("docker_setup.py 脚本执行完成")
-                except subprocess.CalledProcessError as e:
-                    run_warning.append(f"执行 docker_setup.py 脚本时出错：{e}")
-if run_warning:
-    print("\n运行过程中出现以下警告：")
-    for warning in run_warning:
-        print(f"run_warning:{warning}")
+# 使用任务队列防止并发执行
+task_queue = TaskQueue()
+print(f"\n[TaskQueue] 尝试获取任务执行权限...")
+
+if task_queue.acquire(timeout=600, wait=True):
+    try:
+        for file_time, files in SAME_TIME_FILES.items():
+            if len(files) > 1:  # 只处理具有多个文件的组
+                process_files((file_time, files))
+                    # 调用 H1CD.py 脚本
+                # 在合适的位置读取 config.ini 文件中的 source_type 值
+                if satelite_type in ["HY1C", "HY1D"]:
+                    if source_type in ['HY1C', 'HY1D','HY1E']:
+                        try:
+                            subprocess.run(["python", "satelite.py"], check=True)
+                            print("satelite.py 脚本执行完成")
+                        except subprocess.CalledProcessError as e:
+                            run_warning.append(f"执行 satelite.py 脚本时出错：{e}")
+                    else:
+                        try:
+                            subprocess.run(["python", "H1CD.py"], check=True)
+                            print("H1CD.py 脚本执行完成")
+                        except subprocess.CalledProcessError as e:
+                            run_warning.append(f"执行 H1CD.py 脚本时出错：{e}")
+                elif satelite_type in ["HY1E"]:
+                    if source_type in ['HY1C', 'HY1D','HY1E']:
+                        try:
+                            subprocess.run(["python", "satelite.py"], check=True)
+                            print("satelite.py 脚本执行完成")
+                        except subprocess.CalledProcessError as e:
+                            run_warning.append(f"执行 satelite.py 脚本时出错：{e}")
+                    else:
+                        try:
+                            subprocess.run(["python", "docker_setup.py"], check=True)
+                            print("docker_setup.py 脚本执行完成")
+                        except subprocess.CalledProcessError as e:
+                            run_warning.append(f"执行 docker_setup.py 脚本时出错：{e}")
+    finally:
+        # 确保无论成功还是失败都释放锁
+        task_queue.release()
+
+    if run_warning:
+        print("\n运行过程中出现以下警告：")
+        for warning in run_warning:
+            print(f"run_warning:{warning}")
+    else:
+        print("\n运行完成，未发现异常。")
 else:
-    print("\n运行完成，未发现异常。")
+    print("\n[TaskQueue] 无法获取任务执行权限，退出。")
+    sys.exit(1)
