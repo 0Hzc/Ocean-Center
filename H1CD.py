@@ -74,6 +74,25 @@ def run_check(config):
         font_path = font_path.replace('\\', '/')
         sat_input_dir = sat_input_dir.replace('\\', '/')
         reference_input_dir = reference_input_dir.replace('\\', '/')
+
+        from matplotlib import font_manager
+        import matplotlib.pyplot as plt
+
+        print(f"正在尝试加载字体: {font_path}")
+        if os.path.exists(font_path):
+            # 1. 核心：将字体文件加入 Matplotlib 管理器
+            font_manager.fontManager.addfont(font_path)
+            
+            # 2. 设置全局字体为 SimHei
+            plt.rcParams['font.sans-serif'] = ['SimHei']
+            
+            # 3. 解决负号显示为方块的问题
+            plt.rcParams['axes.unicode_minus'] = False
+            
+            print("✅ 字体加载成功！Matplotlib 已锁定 SimHei。")
+        else:
+            print(f"❌ 严重警告：找不到字体文件！路径: {font_path}")
+            print("请检查 config.ini 中的路径是否与 Linux 实际路径完全一致（注意空格和下划线）。")
         
         # 确保输出目录存在
         os.makedirs(output_dir, exist_ok=True)
