@@ -112,15 +112,17 @@ aot_time_format = "%Y%m%d%H%M"  # 新增AOT文件的时间格式
 # 定义时间范围的起始和结束时间
 try:
     start_time = datetime.strptime(start_time_str, time_format)
-    end_time = datetime.strptime(end_time_str, time_format)
-    end_time += timedelta(days=1)  # 将截止日期加一天
+    # 1. 先解析出日期 (默认是 00:00:00)
+    end_time_obj = datetime.strptime(end_time_str, time_format)
+    # 2. 强制将时间修改为当天的 23:59:59
+    end_time = end_time_obj.replace(hour=23, minute=59, second=59)
 except ValueError as e:
     run_warning.append(f"时间格式错误：{e}")
     start_time = None
     end_time = None
 
-# 将截止日期加一天
-end_time += timedelta(days=1)
+# # 将截止日期加一天
+# end_time += timedelta(days=1)
 
 # 定义正则表达式匹配时间信息
 time_pattern = re.compile(r"(\d{8}T\d{6})")
@@ -183,7 +185,7 @@ def scan_files(directory, pattern, xc_pattern, aot_pattern, list_name_l2a=None, 
                         # 如果两种时间格式都不匹配，跳过该文件
                         continue
             if start_time <= file_time <= end_time:
-                if any(keyword in file for keyword in ["AOPRes", "WQP", "AOT", "CTD"]):
+                if any(keyword in file for keyword in ["AOPRes", "DCSSZCGQ", "AOT", "WYCGQ"]):
                     list_name_xc.append(file)
                 elif "L2A" in file:
                     list_name_l2a.append(file)
@@ -246,7 +248,7 @@ def process_files(file_group):
             "AQUA": {"oc_file": None, "sst_file": None},
             "SNPP": {"oc_file": None, "sst_file": None},
             "JPSS": {"oc_file": None, "sst_file": None},
-            "XC": {"aopres_file": None, "wqp_file": None, "aot_file": None, "ctd_file": None}
+            "XC": {"aopres_file": None, "dcsszcgq_file": None, "aot_file": None, "wycgq_file": None}
         }
 
         # 定义分类规则
@@ -258,7 +260,7 @@ def process_files(file_group):
             "AQUA": {"prefix": "AQUA", "oc": "OC", "sst": "SST"},
             "SNPP": {"prefix": "SNPP", "oc": "OC", "sst": "SST"},
             "JPSS": {"prefix": "JPSS", "oc": "OC", "sst": "SST"},
-            "XC": {"prefix": "XC", "aopres": "AOPRes", "wqp": "WQP", "aot": "AOT", "ctd": "CTD"}
+            "XC": {"prefix": "XC", "aopres": "AOPRes", "dcsszcgq": "DCSSZCGQ", "aot": "AOT", "wycgq": "WYCGQ"}
         }
 
         # # 读取现有的 config.ini 文件
@@ -293,12 +295,12 @@ def process_files(file_group):
                 if category == "XC":
                     if rules["aopres"] in file:
                         categories[category]["aopres_file"] = file
-                    elif rules["wqp"] in file:
-                        categories[category]["wqp_file"] = file
+                    elif rules["dcsszcgq"] in file:
+                        categories[category]["dcsszcgq_file"] = file
                     elif rules["aot"] in file:
                         categories[category]["aot_file"] = file
-                    elif rules["ctd"] in file:
-                        categories[category]["ctd_file"] = file
+                    elif rules["wycgq"] in file:
+                        categories[category]["wycgq_file"] = file
                 else:
                     if rules["prefix"] in file:
                         if "l2a" in rules and rules["l2a"] in file:

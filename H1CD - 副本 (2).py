@@ -609,24 +609,11 @@ def process_xc_check_data(aopres_file, dcsszcgq_file, aot_file, wycgq_file, outp
             if df.shape[1] >= 12:
                 df = df.iloc[:, [0, 1, 7, 11]]
                 df.columns = ['Date', 'Time', 'AOT', 'Flag']
-                
-                # 添加调试输出
-                print(f"\n调试信息 - {data_type}:")
-                print(f"原始日期列样例:\n{df['Date'].head()}")
-                print(f"日期列数据类型: {df['Date'].dtype}")
-                
                 try:
-                    # 先转换为字符串并清理格式
-                    df['Date'] = df['Date'].astype(str).str.replace('-', '').str.replace('/', '').str.replace(' ', '').str.strip()
-                    print(f"清理后日期样例:\n{df['Date'].head()}")
-                    
-                    # 尝试转换为日期
-                    df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
-                    
-                    # 统计有效日期
-                    valid_count = df['Date'].notna().sum()
-                    total_count = len(df)
-                    print(f"有效日期数量: {valid_count}/{total_count}")
+                    if df['Date'].dtype == 'object':
+                        df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
+                    else:
+                        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
                     
                     df = df.dropna(subset=['Date'])
                     
@@ -636,38 +623,23 @@ def process_xc_check_data(aopres_file, dcsszcgq_file, aot_file, wycgq_file, outp
                     
                     df['Date'] = df['Date'].dt.strftime('%Y%m%d')
                     df['Time'] = format_time_column(df['Time'])
-                    print(f"最终日期样例:\n{df['Date'].head()}")
                     
                 except Exception as e:
                     print(f"日期格式化错误: {e}")
-                    traceback.print_exc()
                     return
             else:
                 raise ValueError(f"AOT数据列数不足: {df.shape[1]}")
                 
         elif data_type == 'wycgq':
-            # 处理温盐传感器数据
+            # 处理温度数据
             if df.shape[1] >= 3:
                 df = df.iloc[:, [0, 1, 2]]
                 df.columns = ['Date', 'Time', 'SST']
-                
-                # 添加调试输出
-                print(f"\n调试信息 - {data_type}:")
-                print(f"原始日期列样例:\n{df['Date'].head()}")
-                print(f"日期列数据类型: {df['Date'].dtype}")
-                
                 try:
-                    # 先转换为字符串并清理格式
-                    df['Date'] = df['Date'].astype(str).str.replace('-', '').str.replace('/', '').str.replace(' ', '').str.strip()
-                    print(f"清理后日期样例:\n{df['Date'].head()}")
-                    
-                    # 尝试转换为日期
-                    df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
-                    
-                    # 统计有效日期
-                    valid_count = df['Date'].notna().sum()
-                    total_count = len(df)
-                    print(f"有效日期数量: {valid_count}/{total_count}")
+                    if df['Date'].dtype == 'object':
+                        df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
+                    else:
+                        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
                     
                     df = df.dropna(subset=['Date', 'SST'])
                     
@@ -677,11 +649,9 @@ def process_xc_check_data(aopres_file, dcsszcgq_file, aot_file, wycgq_file, outp
                     
                     df['Date'] = df['Date'].dt.strftime('%Y%m%d')
                     df['Time'] = format_time_column(df['Time'])
-                    print(f"最终日期样例:\n{df['Date'].head()}")
                     
                 except Exception as e:
                     print(f"日期格式化错误: {e}")
-                    traceback.print_exc()
                     return
             else:
                 raise ValueError(f"WYCGQ数据列数不足: {df.shape[1]}")
@@ -4418,10 +4388,6 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
             if not has_valid_data:
                 print(f"警告：{var_name} 没有找到有效的报告文件，跳过")
                 continue
-            
-            # 初始化metrics字典
-            metrics = {}
-            
             try:
                 metrics[source] = dict(zip(
                     ['Valid_Ratio', 'CV_Value', 'Relative_Bias'], 

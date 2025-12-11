@@ -114,6 +114,7 @@ def run_check(config):
 
             print("\n处理被检验HY1E数据...")
             process_hye_data(
+                inspection_type,
                 hy_file_l2a=os.path.join(sat_input_dir, config['HY1E']['l2a_file']),
                 hy_file_l2b=os.path.join(sat_input_dir, config['HY1E']['l2b_file']),
                 hy_file_l2c=os.path.join(sat_input_dir, config['HY1E']['l2c_file']),
@@ -234,7 +235,7 @@ def run_check(config):
         traceback.print_exc()
         return False
 
-def process_hye_data(hy_file_l2a, hy_file_l2b, hy_file_l2c, hy_file_l2t,output_dir):
+def process_hye_data(source_type, hy_file_l2a, hy_file_l2b, hy_file_l2c, hy_file_l2t,output_dir):
     """
     处理HY3A待检验数据
     """
@@ -2385,49 +2386,49 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
  # 定义产品配置
     # 定义HY1C_VAR_CONFIG（卫星间验证）
     HY1C_VAR_CONFIG = {
-        'sst': {'sources': ['HY1C'], 'unit': '℃', 'col_values': [25, 1800]},
-        'chl': {'sources': ['HY1C'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
-        'Rrs412': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs443': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs490': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs520': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs565': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs670': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'AOT': {'sources': ['HY1C'], 'unit': '', 'col_values': [25, 1800]},
+        # 'sst': {'sources': ['HY1C'], 'unit': '℃', 'col_values': [25, 1800]},
+        # 'chl': {'sources': ['HY1C'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
+        # 'Rrs412': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs443': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs490': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs520': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs565': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs670': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'AOT': {'sources': ['HY1C'], 'unit': '', 'col_values': [25, 1800]},
         'TSM': {'sources': ['HY1C'], 'unit': 'mg/L', 'col_values': [25, 1800]},
         'CDOM': {'sources': ['HY1C'], 'unit': '1/m', 'col_values': [25, 1800]},
     }
 
     # 定义HY1D_VAR_CONFIG（卫星间验证）
     HY1D_VAR_CONFIG = {
-        'sst': {'sources': ['HY1D'], 'unit': '℃', 'col_values': [25, 1800]},
-        'chl': {'sources': ['HY1D'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
-        'Rrs412': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs443': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs490': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs520': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs565': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs670': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'AOT': {'sources': ['HY1D'], 'unit': '', 'col_values': [25, 1800]},
+        # 'sst': {'sources': ['HY1D'], 'unit': '℃', 'col_values': [25, 1800]},
+        # 'chl': {'sources': ['HY1D'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
+        # 'Rrs412': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs443': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs490': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs520': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs565': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs670': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'AOT': {'sources': ['HY1D'], 'unit': '', 'col_values': [25, 1800]},
         'TSM': {'sources': ['HY1D'], 'unit': 'mg/L', 'col_values': [25, 1800]},
         'CDOM': {'sources': ['HY1D'], 'unit': '1/m', 'col_values': [25, 1800]},
     }
 
     # 定义HY1E_VAR_CONFIG（卫星间验证）
     HY1E_VAR_CONFIG = {
-        'sst': {'sources': ['HY1E'], 'unit': '℃', 'col_values': [25, 1800]},
-        'chl': {'sources': ['HY1E'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
-        'Rrs412': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs443': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs490': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs520': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs565': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs670': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'Rrs750': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
-        'AOT': {'sources': ['HY1E'], 'unit': '', 'col_values': [25, 1800]},
+        # 'sst': {'sources': ['HY1E'], 'unit': '℃', 'col_values': [25, 1800]},
+        # 'chl': {'sources': ['HY1E'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
+        # 'Rrs412': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs443': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs490': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs520': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs565': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs670': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'Rrs750': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
+        # 'AOT': {'sources': ['HY1E'], 'unit': '', 'col_values': [25, 1800]},
         'TSM': {'sources': ['HY1E'], 'unit': 'mg/L', 'col_values': [25, 1800]},
         'CDOM': {'sources': ['HY1E'], 'unit': '1/m', 'col_values': [25, 1800]},
-        'IPAR': {'sources': ['HY1E'], 'unit': 'Einstein/m²/d', 'col_values': [25, 1800]},
+        # 'IPAR': {'sources': ['HY1E'], 'unit': 'Einstein/m²/d', 'col_values': [25, 1800]},
     }
 
     # 初始化VAR_CONFIG
