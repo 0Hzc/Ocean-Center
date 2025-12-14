@@ -512,14 +512,25 @@ def process_xc_check_data(aopres_file, dcsszcgq_file, aot_file, wycgq_file, outp
             if df.shape[1] >= 5:
                 df = df.iloc[:, :5]
                 df.columns = ['Date', 'Time', 'TSM', 'Chl', 'CDOM']
+                
+                # 添加调试输出
+                print(f"\n调试信息 - {data_type}:")
+                print(f"原始日期列样例:\n{df['Date'].head()}")
+                print(f"日期列数据类型: {df['Date'].dtype}")
+                
                 # 格式化日期和时间 - 添加错误处理
                 try:
-                    # 尝试多种日期格式
-                    if df['Date'].dtype == 'object':
-                        # 如果是字符串，尝试直接转换
-                        df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
-                    else:
-                        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+                    # 先转换为字符串并清理格式
+                    df['Date'] = df['Date'].astype(str).str.replace('-', '').str.replace('/', '').str.replace(' ', '').str.strip()
+                    print(f"清理后日期样例:\n{df['Date'].head()}")
+                    
+                    # 尝试转换为日期
+                    df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
+                    
+                    # 统计有效日期
+                    valid_count = df['Date'].notna().sum()
+                    total_count = len(df)
+                    print(f"有效日期数量: {valid_count}/{total_count}")
                     
                     # 移除日期解析失败的行
                     df = df.dropna(subset=['Date'])
@@ -532,9 +543,12 @@ def process_xc_check_data(aopres_file, dcsszcgq_file, aot_file, wycgq_file, outp
                     df['Date'] = df['Date'].dt.strftime('%Y%m%d')
                     df['Time'] = format_time_column(df['Time'])
                     
+                    print(f"最终日期样例:\n{df['Date'].head()}")
+                    
                 except Exception as e:
                     print(f"日期格式化错误: {e}")
-                    print(f"样例数据: {df[['Date', 'Time']].head()}")
+                    print(f"样例数据:\n{df[['Date', 'Time']].head()}")
+                    traceback.print_exc()
                     return
             else:
                 raise ValueError(f"DCSSZCGQ数据列数不足: {df.shape[1]}")
@@ -544,6 +558,28 @@ def process_xc_check_data(aopres_file, dcsszcgq_file, aot_file, wycgq_file, outp
                 df = df.iloc[:, [0, 1, 1116, 1147, 1194, 1224, 1269, 1374, 1454, 1569]]
                 df.columns = ['Date', 'Time', 'Rrs412', 'Rrs443', 'Rrs490', 'Rrs520', 
                             'Rrs565', 'Rrs670', 'Rrs750', 'Rrs865']
+                
+                # 添加调试输出
+                print(f"\n调试信息 - {data_type}:")
+                print(f"原始日期列样例:\n{df['Date'].head()}")
+                
+                # 格式化日期和时间
+                try:
+                    df['Date'] = df['Date'].astype(str).str.replace('-', '').str.replace('/', '').str.strip()
+                    df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
+                    df = df.dropna(subset=['Date'])
+                    
+                    if df.empty:
+                        print(f"警告：{data_type} 数据所有日期解析失败，跳过处理")
+                        return
+                    
+                    df['Date'] = df['Date'].dt.strftime('%Y%m%d')
+                    df['Time'] = format_time_column(df['Time'])
+                    print(f"最终日期样例:\n{df['Date'].head()}")
+                except Exception as e:
+                    print(f"日期格式化错误: {e}")
+                    traceback.print_exc()
+                    return
                 # 格式化日期和时间 - 添加错误处理
                 try:
                     if df['Date'].dtype == 'object':
@@ -573,11 +609,24 @@ def process_xc_check_data(aopres_file, dcsszcgq_file, aot_file, wycgq_file, outp
             if df.shape[1] >= 12:
                 df = df.iloc[:, [0, 1, 7, 11]]
                 df.columns = ['Date', 'Time', 'AOT', 'Flag']
+                
+                # 添加调试输出
+                print(f"\n调试信息 - {data_type}:")
+                print(f"原始日期列样例:\n{df['Date'].head()}")
+                print(f"日期列数据类型: {df['Date'].dtype}")
+                
                 try:
-                    if df['Date'].dtype == 'object':
-                        df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
-                    else:
-                        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+                    # 先转换为字符串并清理格式
+                    df['Date'] = df['Date'].astype(str).str.replace('-', '').str.replace('/', '').str.replace(' ', '').str.strip()
+                    print(f"清理后日期样例:\n{df['Date'].head()}")
+                    
+                    # 尝试转换为日期
+                    df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
+                    
+                    # 统计有效日期
+                    valid_count = df['Date'].notna().sum()
+                    total_count = len(df)
+                    print(f"有效日期数量: {valid_count}/{total_count}")
                     
                     df = df.dropna(subset=['Date'])
                     
@@ -587,23 +636,38 @@ def process_xc_check_data(aopres_file, dcsszcgq_file, aot_file, wycgq_file, outp
                     
                     df['Date'] = df['Date'].dt.strftime('%Y%m%d')
                     df['Time'] = format_time_column(df['Time'])
+                    print(f"最终日期样例:\n{df['Date'].head()}")
                     
                 except Exception as e:
                     print(f"日期格式化错误: {e}")
+                    traceback.print_exc()
                     return
             else:
                 raise ValueError(f"AOT数据列数不足: {df.shape[1]}")
                 
         elif data_type == 'wycgq':
-            # 处理温度数据
+            # 处理温盐传感器数据
             if df.shape[1] >= 3:
                 df = df.iloc[:, [0, 1, 2]]
                 df.columns = ['Date', 'Time', 'SST']
+                
+                # 添加调试输出
+                print(f"\n调试信息 - {data_type}:")
+                print(f"原始日期列样例:\n{df['Date'].head()}")
+                print(f"日期列数据类型: {df['Date'].dtype}")
+                
                 try:
-                    if df['Date'].dtype == 'object':
-                        df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
-                    else:
-                        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+                    # 先转换为字符串并清理格式
+                    df['Date'] = df['Date'].astype(str).str.replace('-', '').str.replace('/', '').str.replace(' ', '').str.strip()
+                    print(f"清理后日期样例:\n{df['Date'].head()}")
+                    
+                    # 尝试转换为日期
+                    df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
+                    
+                    # 统计有效日期
+                    valid_count = df['Date'].notna().sum()
+                    total_count = len(df)
+                    print(f"有效日期数量: {valid_count}/{total_count}")
                     
                     df = df.dropna(subset=['Date', 'SST'])
                     
@@ -613,9 +677,11 @@ def process_xc_check_data(aopres_file, dcsszcgq_file, aot_file, wycgq_file, outp
                     
                     df['Date'] = df['Date'].dt.strftime('%Y%m%d')
                     df['Time'] = format_time_column(df['Time'])
+                    print(f"最终日期样例:\n{df['Date'].head()}")
                     
                 except Exception as e:
                     print(f"日期格式化错误: {e}")
+                    traceback.print_exc()
                     return
             else:
                 raise ValueError(f"WYCGQ数据列数不足: {df.shape[1]}")
@@ -3167,11 +3233,11 @@ def read_ground_spaceresult_file(file_path):
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             lines = file.readlines()
-            if len(lines) >= 7:  # 确保至少有7行
+            if len(lines) >= 9:  # 确保至少有9行
                 return {
                     'hy_file': lines[0].strip(),
                     'compare_file': lines[1].strip(),
-                    'time_diff': float(lines[2].strip()),
+                    'time_diff': float(lines[8].strip()),
                     'valid_ratio': float(lines[5].strip()),  # 第六行:有效像元比例
                     'cv_value': float(lines[6].strip())      # 第七行:CV值
                 }
@@ -4332,6 +4398,30 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
         }
 
         for var_name, config in VAR_CONFIG.items():
+            # 添加：检查是否有有效的源
+            if not config['sources']:
+                print(f"警告：{var_name} 没有配置有效的数据源，跳过")
+                continue
+            
+            # 添加：检查是否有有效的报告文件
+            has_valid_data = False
+            for source in config['sources']:
+                pattern = f'{satellite_type}_COCTS_{source}_{var_name}_report_{datestr}'
+                try:
+                    matching_files = [f for f in os.listdir(coldata_path) if pattern in f]
+                    if matching_files:
+                        has_valid_data = True
+                        break
+                except Exception as e:
+                    print(f"检查文件时出错: {e}")
+            
+            if not has_valid_data:
+                print(f"警告：{var_name} 没有找到有效的报告文件，跳过")
+                continue
+            
+            # 初始化metrics字典
+            metrics = {}
+            
             try:
                 metrics[source] = dict(zip(
                     ['Valid_Ratio', 'CV_Value', 'Relative_Bias'], 
@@ -4556,7 +4646,14 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
         :param output_path: 输出路径
         :param satellite_type: 卫星类型
         """
-    replacements = generate_replacements(datestr, input_img, coldata_path, satellite_type,source_org_type,space_size)
+    try:
+        replacements = generate_replacements(datestr, input_img, coldata_path, satellite_type,source_org_type,space_size)
+    except Exception as e:
+        print(f"警告：生成报告数据失败: {e}")
+        print("原因：可能没有找到有效的验证结果文件")
+        print("提示：请检查现场数据文件的日期格式是否正确")
+        traceback.print_exc()
+        return  # 提前返回，不生成报告
     save_path = os.path.join(output_path)
     if not os.path.exists(save_path):
         os.makedirs(save_path)

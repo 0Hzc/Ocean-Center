@@ -3233,11 +3233,11 @@ def read_ground_spaceresult_file(file_path):
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             lines = file.readlines()
-            if len(lines) >= 7:  # 确保至少有7行
+            if len(lines) >= 10:  # 确保至少有9行
                 return {
                     'hy_file': lines[0].strip(),
                     'compare_file': lines[1].strip(),
-                    'time_diff': float(lines[2].strip()),
+                    'time_diff': float(lines[9].strip()),
                     'valid_ratio': float(lines[5].strip()),  # 第六行:有效像元比例
                     'cv_value': float(lines[6].strip())      # 第七行:CV值
                 }

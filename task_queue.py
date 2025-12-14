@@ -14,15 +14,29 @@ class TaskQueue:
     基于文件锁的任务队列管理器
     确保同一时间只有一个任务在运行
     """
-    def __init__(self, lock_file='/tmp/ocean_center.lock'):
+    def __init__(self, lock_file=None, output_dir=None):
         """
         初始化任务队列
 
-        :param lock_file: 锁文件路径
+        :param lock_file: 锁文件路径（可选，如果提供则直接使用）
+        :param output_dir: 输出目录（可选，如果提供则在此目录下创建锁文件）
         """
-        self.lock_file = lock_file
+        # 优先级: 1. lock_file参数 > 2. output_dir参数 > 3. 默认/tmp
+        if lock_file:
+            self.lock_file = lock_file
+        elif output_dir:
+            # 在output_dir下创建.lock子目录
+            lock_dir = os.path.join(output_dir, '.lock')
+            os.makedirs(lock_dir, exist_ok=True)
+            self.lock_file = os.path.join(lock_dir, 'ocean_center.lock')
+        else:
+            # 默认使用/tmp
+            self.lock_file = '/tmp/ocean_center.lock'
+        
         self.lock_fd = None
         self.acquired = False
+        
+        print(f"[TaskQueue] 初始化，锁文件路径: {self.lock_file}")
 
     def acquire(self, timeout=300, wait=True):
         """
@@ -113,10 +127,26 @@ class TaskQueue:
 if __name__ == "__main__":
     # 测试代码
     print("测试任务队列...")
-
+    
+    # 测试1: 默认路径
+    print("\n=== 测试1: 默认路径 ===")
     with TaskQueue() as queue:
         print("获取到锁,模拟任务执行...")
-        time.sleep(5)
+        time.sleep(2)
         print("任务执行完成")
-
-    print("测试完成")
+    
+    # 测试2: 使用output_dir
+    print("\n=== 测试2: 使用output_dir ===")
+    with TaskQueue(output_dir='./output') as queue:
+        print("获取到锁,模拟任务执行...")
+        time.sleep(2)
+        print("任务执行完成")
+    
+    # 测试3: 使用自定义lock_file
+    print("\n=== 测试3: 使用自定义lock_file ===")
+    with TaskQueue(lock_file='./custom.lock') as queue:
+        print("获取到锁,模拟任务执行...")
+        time.sleep(2)
+        print("任务执行完成")
+    
+    print("\n测试完成")

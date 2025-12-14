@@ -17,12 +17,10 @@ start_time_str = sys.argv[1]  # 第一个参数作为 start_time_str
 end_time_str = sys.argv[2]    # 第二个参数作为 end_time_str
 
 # 创建task文件和独立输出目录
-def create_task_file(start_time_str, end_time_str, output_base_dir):
+def create_task_file(start_time_str, end_time_str):
     """在程序启动时立即创建task文件"""
     task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    # 在 output_dir 下创建 tasks 子目录
-    tasks_dir = os.path.join(output_base_dir, "tasks")
-    task_dir = os.path.join(tasks_dir, task_id)
+    task_dir = os.path.join("tasks", task_id)
     os.makedirs(task_dir, exist_ok=True)
 
     task_info = {
@@ -71,7 +69,7 @@ def update_task_status(task_file, status, warnings=None, error=None):
         print(f"\n[Task] 更新任务状态失败: {e}")
 
 # 立即创建task文件
-# task_output_dir, task_info_file = create_task_file(start_time_str, end_time_str)  # 已移到读取output_dir之后
+task_output_dir, task_info_file = create_task_file(start_time_str, end_time_str)
 
 # 初始化 run_warning 字段
 run_warning = []
@@ -93,19 +91,6 @@ except configparser.NoSectionError:
     run_warning.append(f"配置文件 {config_file} 中缺少 [PATH] 部分，使用默认路径 'input'")
     input_path = "input"
 input_path = input_path.replace('\\', '/')#兼容linux
-
-# 读取 output_dir 配置
-try:
-    output_dir = config.get('PATH', 'output_dir', fallback="output")
-except configparser.NoSectionError:
-    run_warning.append(f"配置文件 {config_file} 中缺少 [PATH] 部分，使用默认输出路径 'output'")
-    output_dir = "output"
-output_dir = output_dir.replace('\\\\', '/')  # 兼容linux
-
-
-# 立即创建task文件
-task_output_dir, task_info_file = create_task_file(start_time_str, end_time_str, output_dir)
-
 sat_path = os.path.join(input_path, "01_sat")
 reference_path = os.path.join(input_path, "02_reference")
 
@@ -350,7 +335,7 @@ def process_files(file_group):
 
 
 # 使用任务队列防止并发执行
-task_queue = TaskQueue(output_dir=output_dir)
+task_queue = TaskQueue()
 print(f"\n[TaskQueue] 尝试获取任务执行权限...")
 
 if task_queue.acquire(timeout=600, wait=True):
