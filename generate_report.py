@@ -641,39 +641,36 @@ class TemplateFiller:
                 unit = config.get('unit', '')
                 n = data.get('n', 0)
 
-                # 验证结果表格 - 问题1&2: 添加单位，增加小数位数；问题6: n=0时填"/"
+                # 验证结果表格（表一）- n=0时不添加，让cleanup清除占位符
                 if n > 0:
                     val_results = [[
                         f'{satellite} vs {source}',
-                        f"{data.get('bias', 0):.4f}{unit}",  # 增加到4位小数，添加单位
-                        f"{data.get('rms', 0):.4f}{unit}"    # 增加到4位小数，添加单位
+                        f"{data.get('bias', 0):.4f}{unit}",
+                        f"{data.get('rms', 0):.4f}{unit}"
                     ]]
-                else:
-                    # 无匹配数据时填"/"
-                    val_results = [[
-                        f'{satellite} vs {source}',
-                        '/',
-                        '/'
-                    ]]
+                    replacements['tables'][f'{{{{val_results_{var_name}}}}}'] = val_results
 
-                # 匹配结果表格 - 问题3: 使用产品中文名；问题4: 添加时间窗口单位
-                space_window = data.get('space_window', '汇总')
-                time_window = data.get('time_window', '汇总')
-                # 为时间窗口添加单位（如果不是"汇总"）
-                if time_window != '汇总' and not time_window.endswith('h'):
-                    time_window = f"{time_window}h"
+                # 匹配结果表格（表二）- n=0时全部填0
+                if n > 0:
+                    space_window = data.get('space_window', '汇总')
+                    time_window = data.get('time_window', '汇总')
+                    # 为时间窗口添加单位（如果不是"汇总"）
+                    if time_window != '汇总' and not time_window.endswith('h'):
+                        time_window = f"{time_window}h"
+                else:
+                    # n=0时：产品名、空间窗口0、时间窗口0、匹配数0
+                    space_window = "0"
+                    time_window = "0"
 
                 col_results = [[
-                    product_cn_name,  # 问题3: 改为产品中文名称
+                    product_cn_name,
                     space_window,
                     time_window,
-                    f"{n}"  # 问题6: 即使n=0也显示0
+                    f"{n}"
                 ]]
-
-                replacements['tables'][f'{{{{val_results_{var_name}}}}}'] = val_results
                 replacements['tables'][f'{{{{col_results_{var_name}}}}}'] = col_results
 
-                # 问题6: 只有n>0时才添加图片路径（第3章才显示该产品）
+                # 只有n>0时才添加图片路径
                 if n > 0:
                     # 图片路径 - 占位符固定为terra
                     pie_key = f'hy1c_vs_{var_name}_terra_sct'
@@ -711,6 +708,9 @@ class TemplateFiller:
 
         # 问题7: 清理所有未替换的占位符（移除大括号形式的参数名称）
         self._cleanup_placeholders(doc)
+
+        # 删除第三章中没有图片的小节并重新编号
+        self._remove_empty_subsections_and_renumber(doc)
 
         doc.save(output_docx)
         print(f"[INFO] ✓ 保存文档: {os.path.basename(output_docx)}")
@@ -797,6 +797,77 @@ class TemplateFiller:
                         for run in p.runs:
                             if placeholder_pattern.search(run.text):
                                 run.text = placeholder_pattern.sub('', run.text)
+
+    def _remove_empty_subsections_and_renumber(self, doc):
+        """
+        删除第三章中没有图片的小节，并重新编号所有小节
+        识别规则：小节标题通常包含数字编号（如"3.1"、"3.2"等）
+        """
+        import re
+        from docx.oxml import OxmlElement
+
+        # 第一步：找出需要删除的段落范围
+        paragraphs_to_delete = []
+        subsection_starts = []  # 记录所有小节开始的段落索引
+
+        # 识别所有小节标题（通常是3.x格式）
+        subsection_pattern = re.compile(r'^3\.\d+')
+
+        for i, para in enumerate(doc.paragraphs):
+            text = para.text.strip()
+            # 检查是否是小节标题
+            if subsection_pattern.match(text):
+                subsection_starts.append(i)
+
+        # 第二步：检查每个小节是否包含内容（非空段落或有实际内容）
+        for idx in range(len(subsection_starts)):
+            start_idx = subsection_starts[idx]
+            # 确定小节结束位置（下一个小节开始前，或文档结束）
+            end_idx = subsection_starts[idx + 1] if idx + 1 < len(subsection_starts) else len(doc.paragraphs)
+
+            # 检查这个小节是否为空（只有标题，没有其他有意义内容）
+            has_content = False
+            for para_idx in range(start_idx + 1, end_idx):
+                if para_idx < len(doc.paragraphs):
+                    para = doc.paragraphs[para_idx]
+                    # 检查段落是否有文本内容（排除只有空白的段落）
+                    if para.text.strip() and not para.text.strip().startswith('3.'):
+                        # 检查是否包含图片
+                        has_image = False
+                        for run in para.runs:
+                            if hasattr(run, '_element'):
+                                drawings = run._element.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}drawing')
+                                if drawings:
+                                    has_image = True
+                                    break
+                        if has_image or len(para.text.strip()) > 5:  # 有图片或有实质内容
+                            has_content = True
+                            break
+
+            # 如果小节为空，标记删除该范围的所有段落
+            if not has_content:
+                for para_idx in range(start_idx, end_idx):
+                    if para_idx not in paragraphs_to_delete and para_idx < len(doc.paragraphs):
+                        paragraphs_to_delete.append(para_idx)
+
+        # 第三步：删除标记的段落（从后往前删，避免索引变化）
+        for para_idx in sorted(paragraphs_to_delete, reverse=True):
+            if para_idx < len(doc.paragraphs):
+                p = doc.paragraphs[para_idx]
+                p_element = p._element
+                p_element.getparent().remove(p_element)
+
+        # 第四步：重新编号所有小节
+        subsection_counter = 1
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            # 匹配3.x格式的标题
+            match = subsection_pattern.match(text)
+            if match:
+                # 替换为新的编号
+                new_text = re.sub(r'^3\.\d+', f'3.{subsection_counter}', text)
+                para.text = new_text
+                subsection_counter += 1
 
 
 # ============================================================================
