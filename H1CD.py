@@ -31,6 +31,20 @@ from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.enum.table import WD_ALIGN_VERTICAL
 import subprocess
 
+# 产品中文名称映射
+PRODUCT_NAMES = {
+    'sst': '海表温度',
+    'chl': '叶绿素浓度',
+    'AOT': '气溶胶光学厚度',
+    'Rrs412': '412nm遥感反射率',
+    'Rrs443': '443nm遥感反射率',
+    'Rrs490': '490nm遥感反射率',
+    'Rrs520': '520nm遥感反射率',
+    'Rrs565': '565nm遥感反射率',
+    'Rrs670': '670nm遥感反射率',
+    'TSM': '总悬浮物浓度',
+    'CDOM': '有色溶解有机物'
+}
 
 def load_config(): 
     """加载配置文件"""
@@ -2413,8 +2427,12 @@ def step7(satellite_type,input_dir, output_dir):
                         shading='auto')
         
         cbar = plt.colorbar(im, orientation='vertical', pad=0.05)
-        cbar.set_label('Error (%)')
-        
+        # 问题5: SST产品使用K作为单位，其他产品使用%
+        if 'sst' in product_type:
+            cbar.set_label('Error (K)')
+        else:
+            cbar.set_label('Error (%)')
+
         plt.title(title)
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
@@ -2972,21 +2990,21 @@ def analyze_star_check(check_type,valresults, spaceresults, input_directory):
     if product == 'sst' and difference_counts['differences']:
         min_diff = difference_counts['min_diff']
         max_diff = difference_counts['max_diff']
-        
+
         # 添加保护逻辑，确保有合理的区间范围
         if min_diff == max_diff:
             # 如果最大最小值相同，创建一个固定的区间范围
             min_diff = min_diff - 0.5
             max_diff = max_diff + 0.5
-        
-        # 创建5个均匀的区间
+
+        # 创建5个均匀的区间（问题5: SST添加K单位）
         interval = (max_diff - min_diff) / 5
         new_counts = {
-            f"{min_diff:.1f}~{min_diff+interval:.1f}": 0,
-            f"{min_diff+interval:.1f}~{min_diff+2*interval:.1f}": 0,
-            f"{min_diff+2*interval:.1f}~{min_diff+3*interval:.1f}": 0,
-            f"{min_diff+3*interval:.1f}~{min_diff+4*interval:.1f}": 0,
-            f"{min_diff+4*interval:.1f}~{max_diff:.1f}": 0
+            f"{min_diff:.1f}~{min_diff+interval:.1f}K": 0,
+            f"{min_diff+interval:.1f}~{min_diff+2*interval:.1f}K": 0,
+            f"{min_diff+2*interval:.1f}~{min_diff+3*interval:.1f}K": 0,
+            f"{min_diff+3*interval:.1f}~{min_diff+4*interval:.1f}K": 0,
+            f"{min_diff+4*interval:.1f}~{max_diff:.1f}K": 0
         }
         
         # 统计每个区间的数量
@@ -3360,21 +3378,21 @@ def analyze_ground_validation(valresults, spaceresults):
     if product == 'sst' and difference_counts['differences']:
         min_diff = difference_counts['min_diff']
         max_diff = difference_counts['max_diff']
-        
+
         # 添加保护逻辑，确保有合理的区间范围
         if min_diff == max_diff:
             # 如果最大最小值相同，创建一个固定的区间范围
             min_diff = min_diff - 0.5
             max_diff = max_diff + 0.5
-        
-        # 创建5个均匀的区间
+
+        # 创建5个均匀的区间（问题5: SST添加K单位）
         interval = (max_diff - min_diff) / 5
         new_counts = {
-            f"{min_diff:.1f}~{min_diff+interval:.1f}": 0,
-            f"{min_diff+interval:.1f}~{min_diff+2*interval:.1f}": 0,
-            f"{min_diff+2*interval:.1f}~{min_diff+3*interval:.1f}": 0,
-            f"{min_diff+3*interval:.1f}~{min_diff+4*interval:.1f}": 0,
-            f"{min_diff+4*interval:.1f}~{max_diff:.1f}": 0
+            f"{min_diff:.1f}~{min_diff+interval:.1f}K": 0,
+            f"{min_diff+interval:.1f}~{min_diff+2*interval:.1f}K": 0,
+            f"{min_diff+2*interval:.1f}~{min_diff+3*interval:.1f}K": 0,
+            f"{min_diff+3*interval:.1f}~{min_diff+4*interval:.1f}K": 0,
+            f"{min_diff+4*interval:.1f}~{max_diff:.1f}K": 0
         }
         
         # 统计每个区间的数量
@@ -4081,15 +4099,42 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                 for source in config['sources']
             }
 
-            val_results = [
-                [f'{satellite_type} vs {source}', f"{metrics[source]['bias']:.2f}", f"{metrics[source]['rms']:.2f}"]
-                for source in config['sources']
-            ]
+            # 获取产品中文名称和单位
+            product_cn_name = PRODUCT_NAMES.get(var_name, var_name)
+            unit = config.get('unit', '')
 
-            col_results = [
-                [f'{satellite_type} vs {source}', f"{space_size}*{space_size}", f"{time_size}", f"{metrics[source]['n']}"]
-                for source in config['sources']
-            ]
+            # 生成val_results和col_results（处理问题1-4,6）
+            val_results = []
+            col_results = []
+            has_valid_data = False  # 用于问题6：判断是否有n>0的数据
+
+            for source in config['sources']:
+                n = metrics[source]['n']
+
+                # 验证结果表格 - 问题1&2: 添加单位，增加小数位数；问题6: n=0时填"/"
+                if n > 0:
+                    has_valid_data = True
+                    val_results.append([
+                        f'{satellite_type} vs {source}',
+                        f"{metrics[source]['bias']:.4f}{unit}",  # 增加到4位小数，添加单位
+                        f"{metrics[source]['rms']:.4f}{unit}"    # 增加到4位小数，添加单位
+                    ])
+                else:
+                    # 无匹配数据时填"/"
+                    val_results.append([
+                        f'{satellite_type} vs {source}',
+                        '/',
+                        '/'
+                    ])
+
+                # 匹配结果表格 - 问题3: 使用产品中文名；问题4: 添加时间窗口单位
+                time_window = f"{time_size}h" if time_size != '汇总' and not str(time_size).endswith('h') else str(time_size)
+                col_results.append([
+                    product_cn_name,  # 问题3: 改为产品中文名称
+                    f"{space_size}*{space_size}",
+                    time_window,
+                    f"{n}"  # 问题6: 即使n=0也显示0
+                ])
 
             # 生成唯一的图片占位符
             image_keys = {
@@ -4129,24 +4174,26 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                             timestamp = parts[6].replace('.txt', '')
                             break
 
+            # 问题6: 只有has_valid_data为True时才添加图片路径（第3章才显示该产品）
             images = {}
-            for key in image_keys['sct']:
-                img_path = os.path.join(imgpath, f'{satellite_type}_COCTS_{source_org_type}_{var_name.upper()}_PIE_{datestr}_{timestamp}.jpg')
-                if not os.path.exists(img_path):
-                    alt_img_path = os.path.join(imgpath, f'{satellite_type}_COCTS_{source_org_type}_{var_name}_PIE_{datestr}_{timestamp}.jpg')
-                    if os.path.exists(alt_img_path):
-                        img_path = alt_img_path
-                        print(f"使用替代图片路径: {img_path}")
-                images[f'{{{{{key}}}}}'] = img_path
+            if has_valid_data:
+                for key in image_keys['sct']:
+                    img_path = os.path.join(imgpath, f'{satellite_type}_COCTS_{source_org_type}_{var_name.upper()}_PIE_{datestr}_{timestamp}.jpg')
+                    if not os.path.exists(img_path):
+                        alt_img_path = os.path.join(imgpath, f'{satellite_type}_COCTS_{source_org_type}_{var_name}_PIE_{datestr}_{timestamp}.jpg')
+                        if os.path.exists(alt_img_path):
+                            img_path = alt_img_path
+                            print(f"使用替代图片路径: {img_path}")
+                    images[f'{{{{{key}}}}}'] = img_path
 
-            for key in image_keys['geo']:
-                img_path = os.path.join(imgpath, f'{satellite_type}_COCTS_{source_org_type}_{var_name.upper()}_GEO_{datestr}_{timestamp}.jpg')
-                if not os.path.exists(img_path):
-                    alt_img_path = os.path.join(imgpath, f'{satellite_type}_COCTS_{source_org_type}_{var_name}_GEO_{datestr}_{timestamp}.jpg')
-                    if os.path.exists(alt_img_path):
-                        img_path = alt_img_path
-                        print(f"使用替代图片路径: {img_path}")
-                images[f'{{{{{key}}}}}'] = img_path
+                for key in image_keys['geo']:
+                    img_path = os.path.join(imgpath, f'{satellite_type}_COCTS_{source_org_type}_{var_name.upper()}_GEO_{datestr}_{timestamp}.jpg')
+                    if not os.path.exists(img_path):
+                        alt_img_path = os.path.join(imgpath, f'{satellite_type}_COCTS_{source_org_type}_{var_name}_GEO_{datestr}_{timestamp}.jpg')
+                        if os.path.exists(alt_img_path):
+                            img_path = alt_img_path
+                            print(f"使用替代图片路径: {img_path}")
+                    images[f'{{{{{key}}}}}'] = img_path
 
             replacements['text'].update({
                 '{{satellite_type}}': satellite_type,
@@ -4246,6 +4293,26 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         if not found:
             print(f"未找到占位符 '{placeholder}' 的位置。")
 
+    def _cleanup_placeholders(doc):
+        """清理所有未替换的占位符（问题7: 移除大括号形式的参数名称）"""
+        import re
+        placeholder_pattern = re.compile(r'\{\{[^}]+\}\}')
+
+        # 清理段落中的占位符
+        for p in doc.paragraphs:
+            for run in p.runs:
+                if placeholder_pattern.search(run.text):
+                    run.text = placeholder_pattern.sub('', run.text)
+
+        # 清理表格中的占位符
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        for run in p.runs:
+                            if placeholder_pattern.search(run.text):
+                                run.text = placeholder_pattern.sub('', run.text)
+
     def fill_template(template_path, output_docx, output_pdf, replacements):
         """
         自动填充Word模板并转换为PDF
@@ -4275,6 +4342,9 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         # 对于现场数据报告，将所有 "XC卫星" 和 "XC" 替换为 "现场"
         _replace_text(doc, 'XC卫星', '现场')
         _replace_text(doc, 'XC', '现场')
+
+        # 问题7: 清理所有未替换的占位符（移除大括号形式的参数名称）
+        _cleanup_placeholders(doc)
 
         doc.save(output_docx)
 
@@ -4603,6 +4673,26 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
         if not found:
             print(f"未找到占位符 '{placeholder}' 的位置。")
 
+    def _cleanup_placeholders(doc):
+        """清理所有未替换的占位符（问题7: 移除大括号形式的参数名称）"""
+        import re
+        placeholder_pattern = re.compile(r'\{\{[^}]+\}\}')
+
+        # 清理段落中的占位符
+        for p in doc.paragraphs:
+            for run in p.runs:
+                if placeholder_pattern.search(run.text):
+                    run.text = placeholder_pattern.sub('', run.text)
+
+        # 清理表格中的占位符
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        for run in p.runs:
+                            if placeholder_pattern.search(run.text):
+                                run.text = placeholder_pattern.sub('', run.text)
+
     def fill_template(template_path, output_docx, output_pdf, replacements):
         """
         自动填充Word模板并转换为PDF
@@ -4632,6 +4722,9 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
         # 对于现场数据报告，将所有 "XC卫星" 和 "XC" 替换为 "现场"
         _replace_text(doc, 'XC卫星', '现场')
         _replace_text(doc, 'XC', '现场')
+
+        # 问题7: 清理所有未替换的占位符（移除大括号形式的参数名称）
+        _cleanup_placeholders(doc)
 
         doc.save(output_docx)
 
