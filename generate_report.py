@@ -306,32 +306,50 @@ class ChartGenerator:
             diffs = self._parse_matchup_file(matchup_file)
             if diffs:
                 differences.extend(diffs)
-        
+
         if not differences:
             return None
-        
+
         product_name = PRODUCT_NAMES.get(product, product)
-        
-        difference_counts = {
-            '0~5%': 0,
-            '5~10%': 0,
-            '10~15%': 0,
-            '15~20%': 0,
-            '≥20%': 0
-        }
-        
+
+        # 问题5: SST产品使用K作为单位，其他产品使用%
+        product_lower = product.lower()
+        if 'sst' in product_lower:
+            # SST使用开尔文(K)
+            difference_counts = {
+                '0~5K': 0,
+                '5~10K': 0,
+                '10~15K': 0,
+                '15~20K': 0,
+                '≥20K': 0
+            }
+        else:
+            # 其他产品使用百分比
+            difference_counts = {
+                '0~5%': 0,
+                '5~10%': 0,
+                '10~15%': 0,
+                '15~20%': 0,
+                '≥20%': 0
+            }
+
         for diff in differences:
             abs_diff = abs(diff)
             if abs_diff < 5:
-                difference_counts['0~5%'] += 1
+                key = list(difference_counts.keys())[0]
+                difference_counts[key] += 1
             elif abs_diff < 10:
-                difference_counts['5~10%'] += 1
+                key = list(difference_counts.keys())[1]
+                difference_counts[key] += 1
             elif abs_diff < 15:
-                difference_counts['10~15%'] += 1
+                key = list(difference_counts.keys())[2]
+                difference_counts[key] += 1
             elif abs_diff < 20:
-                difference_counts['15~20%'] += 1
+                key = list(difference_counts.keys())[3]
+                difference_counts[key] += 1
             else:
-                difference_counts['≥20%'] += 1
+                key = list(difference_counts.keys())[4]
+                difference_counts[key] += 1
         
         plt.figure(figsize=(10, 8))
         sizes = list(difference_counts.values())
@@ -533,8 +551,12 @@ class ChartGenerator:
             plt.grid(True, alpha=0.3)
         
         cbar = plt.colorbar(scatter, orientation='vertical', pad=0.05)
-        cbar.set_label('Error (%)')
-        
+        # 问题5: SST产品使用K作为单位，其他产品使用%
+        if 'sst' in product_lower:
+            cbar.set_label('Error (K)')
+        else:
+            cbar.set_label('Error (%)')
+
         plt.title(f"{product_name}检验误差分布")
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
@@ -609,39 +631,60 @@ class TemplateFiller:
         }
         
         var_config = VAR_CONFIGS.get(source.upper(), {})
-        
+
         for var_name, config in var_config.items():
             if var_name in products_data:
                 data = products_data[var_name]
-                
-                # 验证结果表格
-                val_results = [[
-                    f'{satellite} vs {source}',
-                    f"{data.get('bias', 0):.2f}",
-                    f"{data.get('rms', 0):.2f}"
-                ]]
-                
-                # 匹配结果表格
+
+                # 获取产品中文名称和单位
+                product_cn_name = PRODUCT_NAMES.get(var_name, var_name)
+                unit = config.get('unit', '')
+                n = data.get('n', 0)
+
+                # 验证结果表格 - 问题1&2: 添加单位，增加小数位数；问题6: n=0时填"/"
+                if n > 0:
+                    val_results = [[
+                        f'{satellite} vs {source}',
+                        f"{data.get('bias', 0):.4f}{unit}",  # 增加到4位小数，添加单位
+                        f"{data.get('rms', 0):.4f}{unit}"    # 增加到4位小数，添加单位
+                    ]]
+                else:
+                    # 无匹配数据时填"/"
+                    val_results = [[
+                        f'{satellite} vs {source}',
+                        '/',
+                        '/'
+                    ]]
+
+                # 匹配结果表格 - 问题3: 使用产品中文名；问题4: 添加时间窗口单位
+                space_window = data.get('space_window', '汇总')
+                time_window = data.get('time_window', '汇总')
+                # 为时间窗口添加单位（如果不是"汇总"）
+                if time_window != '汇总' and not time_window.endswith('h'):
+                    time_window = f"{time_window}h"
+
                 col_results = [[
-                    f'{satellite} vs {source}',
-                    data.get('space_window', '汇总'),
-                    data.get('time_window', '汇总'),
-                    f"{data.get('n', 0)}"
+                    product_cn_name,  # 问题3: 改为产品中文名称
+                    space_window,
+                    time_window,
+                    f"{n}"  # 问题6: 即使n=0也显示0
                 ]]
-                
+
                 replacements['tables'][f'{{{{val_results_{var_name}}}}}'] = val_results
                 replacements['tables'][f'{{{{col_results_{var_name}}}}}'] = col_results
-                
-                # 图片路径 - 占位符固定为terra
-                pie_key = f'hy1c_vs_{var_name}_terra_sct'
-                geo_key = f'hy1c_vs_{var_name}_terra_geo'
-                
-                pie_path = os.path.join(image_dir, f'{satellite}_COCTS_{source}_{var_name}_PIE_{timestamp}.jpg')
-                geo_path = os.path.join(image_dir, f'{satellite}_COCTS_{source}_{var_name}_GEO_{timestamp}.jpg')
-                
-                replacements['images'][f'{{{{{pie_key}}}}}'] = pie_path
-                replacements['images'][f'{{{{{geo_key}}}}}'] = geo_path
-                
+
+                # 问题6: 只有n>0时才添加图片路径（第3章才显示该产品）
+                if n > 0:
+                    # 图片路径 - 占位符固定为terra
+                    pie_key = f'hy1c_vs_{var_name}_terra_sct'
+                    geo_key = f'hy1c_vs_{var_name}_terra_geo'
+
+                    pie_path = os.path.join(image_dir, f'{satellite}_COCTS_{source}_{var_name}_PIE_{timestamp}.jpg')
+                    geo_path = os.path.join(image_dir, f'{satellite}_COCTS_{source}_{var_name}_GEO_{timestamp}.jpg')
+
+                    replacements['images'][f'{{{{{pie_key}}}}}'] = pie_path
+                    replacements['images'][f'{{{{{geo_key}}}}}'] = geo_path
+
                 replacements['text']['{{unit}}'] = config.get('unit', '')
         
         return replacements
@@ -665,7 +708,10 @@ class TemplateFiller:
         # XC替换为现场
         self._replace_text(doc, 'XC卫星', '现场')
         self._replace_text(doc, 'XC', '现场')
-        
+
+        # 问题7: 清理所有未替换的占位符（移除大括号形式的参数名称）
+        self._cleanup_placeholders(doc)
+
         doc.save(output_docx)
         print(f"[INFO] ✓ 保存文档: {os.path.basename(output_docx)}")
     
@@ -731,6 +777,26 @@ class TemplateFiller:
                         run = cell.add_run()
                         run.add_picture(image_path, width=Inches(4))
                         return
+
+    def _cleanup_placeholders(self, doc):
+        """清理所有未替换的占位符（问题7: 移除大括号形式的参数名称）"""
+        import re
+        placeholder_pattern = re.compile(r'\{\{[^}]+\}\}')
+
+        # 清理段落中的占位符
+        for p in doc.paragraphs:
+            for run in p.runs:
+                if placeholder_pattern.search(run.text):
+                    run.text = placeholder_pattern.sub('', run.text)
+
+        # 清理表格中的占位符
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        for run in p.runs:
+                            if placeholder_pattern.search(run.text):
+                                run.text = placeholder_pattern.sub('', run.text)
 
 
 # ============================================================================
@@ -960,9 +1026,10 @@ class MonthlyReportGenerator:
                     satellite, source, products_data, period_str, timestamp, self.image_dir
                 )
                 
+                # 问题8: 调整文件名格式，使用大写以匹配日报格式
                 output_docx = os.path.join(
                     self.summary_dir,
-                    f'{satellite}_COCTS_{source}_summary_{suffix}.docx'
+                    f'{satellite.upper()}_COCTS_{source.upper()}_summary_{suffix}.docx'
                 )
                 
                 self.template_filler.fill_template(template_path, output_docx, replacements)
