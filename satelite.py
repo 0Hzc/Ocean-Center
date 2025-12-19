@@ -2950,11 +2950,11 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         _replace_text(doc, 'XC卫星', '现场')
         _replace_text(doc, 'XC', '现场')
 
+        # 先删除所有章节中没有图片的小节并重新编号（必须在清理占位符之前执行）
+        _remove_empty_subsections_and_renumber(doc)
+
         # 问题7: 清理所有未替换的占位符（移除大括号形式的参数名称）
         _cleanup_placeholders(doc)
-
-        # 删除没有图片的小节并重新编号
-        _remove_empty_subsections_and_renumber(doc)
 
         doc.save(output_docx)
 
