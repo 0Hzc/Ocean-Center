@@ -888,59 +888,43 @@ class TemplateFiller:
 
     def _remove_empty_subsections_and_renumber(self, doc):
         """
-        删除所有没有图片和实质内容的小节，并删除没有小节的大章节，然后重新编号
-        识别规则：
-        - 大章节标题格式："数字 文本"（如"3 HY1C vs TERRA 检验结果"）
-        - 小节标题格式："数字.数字"（如"3.1"、"8.2"等）
+        删除所有没有图片和实质内容的小节，并重新编号
+        识别规则：小节标题格式为"X.Y"（如"3.1"、"8.2"、"10.1"等）
         """
         import re
         from collections import defaultdict
 
-        # 第一步：识别所有大章节和小节
-        chapter_pattern = re.compile(r'^(\d+)\s+')  # 匹配 "3 " 这样的大章节
-        subsection_pattern = re.compile(r'^(\d+)\.(\d+)')  # 匹配 "3.1" 这样的小节
+        # 第一步：找出需要删除的段落范围
+        paragraphs_to_delete = []
+        subsection_info = []  # 记录所有小节信息：(para_idx, chapter, subsection, text)
 
-        chapter_info = []  # 记录大章节：(para_idx, chapter_num, text)
-        subsection_info = []  # 记录小节：(para_idx, chapter_num, subsection_num, text)
+        # 识别所有小节标题（X.Y格式，如3.1、8.2、10.1等）
+        subsection_pattern = re.compile(r'^(\d+)\.(\d+)')
 
         for i, para in enumerate(doc.paragraphs):
             text = para.text.strip()
-
-            # 先检查是否是小节标题
-            subsection_match = subsection_pattern.match(text)
-            if subsection_match:
-                chapter = int(subsection_match.group(1))
-                subsection = int(subsection_match.group(2))
+            # 检查是否是小节标题
+            match = subsection_pattern.match(text)
+            if match:
+                chapter = int(match.group(1))
+                subsection = int(match.group(2))
                 subsection_info.append((i, chapter, subsection, text))
-                continue
 
-            # 再检查是否是大章节标题
-            chapter_match = chapter_pattern.match(text)
-            if chapter_match:
-                chapter = int(chapter_match.group(1))
-                chapter_info.append((i, chapter, text))
-
-        # 第二步：检查每个小节是否包含图片或实质内容
-        paragraphs_to_delete = []
-        deleted_subsections = set()  # 记录被删除的小节 (chapter, subsection)
-
+        # 第二步：检查每个小节是否包含内容（非空段落或有实际内容）
         for idx in range(len(subsection_info)):
             start_idx = subsection_info[idx][0]
-            chapter = subsection_info[idx][1]
-            subsection = subsection_info[idx][2]
-
-            # 确定小节结束位置
+            # 确定小节结束位置（下一个小节开始前，或文档结束）
             end_idx = subsection_info[idx + 1][0] if idx + 1 < len(subsection_info) else len(doc.paragraphs)
 
-            # 检查小节是否有实质内容
+            # 检查这个小节是否为空（只有标题，没有其他有意义内容）
             has_content = False
             for para_idx in range(start_idx + 1, end_idx):
                 if para_idx < len(doc.paragraphs):
                     para = doc.paragraphs[para_idx]
                     text = para.text.strip()
 
-                    # 跳过空白和其他小节/章节标题
-                    if not text or subsection_pattern.match(text) or chapter_pattern.match(text):
+                    # 跳过空白和其他小节标题
+                    if not text or subsection_pattern.match(text):
                         continue
 
                     # 检查是否包含图片
@@ -952,7 +936,7 @@ class TemplateFiller:
                                 has_image = True
                                 break
 
-                    # 如果有图片，则认为有内容
+                    # 如果有图片或有实质内容（排除占位符）
                     if has_image:
                         has_content = True
                         break
@@ -962,67 +946,31 @@ class TemplateFiller:
                         has_content = True
                         break
 
-            # 如果小节为空，标记删除
+            # 如果小节为空，标记删除该范围的所有段落
             if not has_content:
-                deleted_subsections.add((chapter, subsection))
                 for para_idx in range(start_idx, end_idx):
                     if para_idx not in paragraphs_to_delete and para_idx < len(doc.paragraphs):
                         paragraphs_to_delete.append(para_idx)
 
-        # 第三步：检查每个大章节，如果所有小节都被删除了，删除该大章节标题
-        remaining_subsections_by_chapter = defaultdict(list)
-        for para_idx, chapter, subsection, text in subsection_info:
-            if (chapter, subsection) not in deleted_subsections:
-                remaining_subsections_by_chapter[chapter].append(subsection)
-
-        # 标记需要删除的大章节标题
-        for para_idx, chapter, text in chapter_info:
-            if chapter not in remaining_subsections_by_chapter or len(remaining_subsections_by_chapter[chapter]) == 0:
-                # 该章节下没有任何小节了，删除大章节标题
-                if para_idx not in paragraphs_to_delete:
-                    paragraphs_to_delete.append(para_idx)
-
-        # 第四步：删除标记的段落（从后往前删，避免索引变化）
+        # 第三步：删除标记的段落（从后往前删，避免索引变化）
         for para_idx in sorted(paragraphs_to_delete, reverse=True):
             if para_idx < len(doc.paragraphs):
                 p = doc.paragraphs[para_idx]
                 p_element = p._element
                 p_element.getparent().remove(p_element)
 
-        # 第五步：重新编号大章节和小节
-        new_chapter_num = 0
-        chapter_mapping = {}  # 旧章节号 -> 新章节号
+        # 第四步：重新编号所有小节（按章节分组）
+        chapter_counters = defaultdict(int)
 
-        # 先确定哪些大章节需要重新编号
-        existing_chapters = sorted(remaining_subsections_by_chapter.keys())
-        for old_chapter in existing_chapters:
-            new_chapter_num += 1
-            chapter_mapping[old_chapter] = new_chapter_num
-
-        # 重新编号大章节标题
         for para in doc.paragraphs:
             text = para.text.strip()
-            chapter_match = chapter_pattern.match(text)
-            if chapter_match:
-                old_chapter = int(chapter_match.group(1))
-                if old_chapter in chapter_mapping:
-                    new_chapter = chapter_mapping[old_chapter]
-                    new_text = re.sub(r'^\d+', str(new_chapter), text)
-                    para.text = new_text
-
-        # 重新编号小节
-        chapter_subsection_counters = defaultdict(int)
-        for para in doc.paragraphs:
-            text = para.text.strip()
-            subsection_match = subsection_pattern.match(text)
-            if subsection_match:
-                old_chapter = int(subsection_match.group(1))
-                if old_chapter in chapter_mapping:
-                    new_chapter = chapter_mapping[old_chapter]
-                    chapter_subsection_counters[new_chapter] += 1
-                    new_subsection = chapter_subsection_counters[new_chapter]
-                    new_text = re.sub(r'^\d+\.\d+', f'{new_chapter}.{new_subsection}', text)
-                    para.text = new_text
+            match = subsection_pattern.match(text)
+            if match:
+                chapter = int(match.group(1))
+                chapter_counters[chapter] += 1
+                # 替换为新的编号
+                new_text = re.sub(r'^\d+\.\d+', f'{chapter}.{chapter_counters[chapter]}', text)
+                para.text = new_text
 
 
 # ============================================================================
