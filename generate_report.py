@@ -709,11 +709,11 @@ class TemplateFiller:
         self._replace_text(doc, 'XC卫星', '现场')
         self._replace_text(doc, 'XC', '现场')
 
+        # 先删除所有章节中没有图片的小节并重新编号（必须在清理占位符之前执行）
+        self._remove_empty_subsections_and_renumber(doc)
+
         # 问题7: 清理所有未替换的占位符（移除大括号形式的参数名称）
         self._cleanup_placeholders(doc)
-
-        # 删除第三章中没有图片的小节并重新编号
-        self._remove_empty_subsections_and_renumber(doc)
 
         doc.save(output_docx)
         print(f"[INFO] ✓ 保存文档: {os.path.basename(output_docx)}")
