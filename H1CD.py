@@ -4383,7 +4383,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                                 content_details.append(f"图片")
                                 break
 
-                    # 如果有图片或有实质内容（排除占位符）
+                    # 如果有图片，则认为有内容
                     if has_image:
                         has_content = True
                         break
@@ -4392,7 +4392,16 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                     if '{{' in text:
                         has_placeholder = True
                         content_details.append(f"占位符: {text[:40]}...")
-                    elif len(text) > 5:
+                        continue  # 跳过占位符，继续检查下一段
+
+                    # 检查是否只是图片标题（以"图"开头，包含关键词）
+                    if text.startswith('图') and any(word in text for word in ['HY1C', 'vs', '检验', '分布', 'TERRA', 'AQUA']):
+                        # 这是图片标题，但没有实际图片，不算实质内容
+                        content_details.append(f"图片标题: {text[:40]}...")
+                        continue  # 跳过图片标题，继续检查下一段
+
+                    # 其他有实质内容的文本
+                    if len(text) > 5:
                         has_content = True
                         content_details.append(f"文本: {text[:40]}...")
                         break
@@ -5052,7 +5061,7 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
                                 content_details.append(f"图片")
                                 break
 
-                    # 如果有图片或有实质内容（排除占位符）
+                    # 如果有图片，则认为有内容
                     if has_image:
                         has_content = True
                         break
@@ -5061,7 +5070,16 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
                     if '{{' in text:
                         has_placeholder = True
                         content_details.append(f"占位符: {text[:40]}...")
-                    elif len(text) > 5:
+                        continue  # 跳过占位符，继续检查下一段
+
+                    # 检查是否只是图片标题（以"图"开头，包含关键词）
+                    if text.startswith('图') and any(word in text for word in ['HY1C', 'vs', '检验', '分布', 'TERRA', 'AQUA']):
+                        # 这是图片标题，但没有实际图片，不算实质内容
+                        content_details.append(f"图片标题: {text[:40]}...")
+                        continue  # 跳过图片标题，继续检查下一段
+
+                    # 其他有实质内容的文本
+                    if len(text) > 5:
                         has_content = True
                         content_details.append(f"文本: {text[:40]}...")
                         break
