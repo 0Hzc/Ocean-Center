@@ -2823,6 +2823,84 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                 para.text = new_text
                 subsection_counter += 1
 
+    def _handle_unused_placeholders(doc, replacements):
+        """
+        处理模板中存在但未使用的占位符
+        - 表一（val_results）：填写检验类型和"/"
+        - 表二（col_results）：删除整行
+        - 第三章图片占位符：由_remove_empty_subsections_and_renumber处理
+        """
+        import re
+
+        # 扫描所有占位符
+        all_placeholders = set()
+        placeholder_pattern = re.compile(r'\{\{([^}]+)\}\}')
+
+        # 从所有段落中提取占位符
+        for p in doc.paragraphs:
+            matches = placeholder_pattern.findall(p.text)
+            all_placeholders.update(matches)
+
+        # 从所有表格中提取占位符
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        matches = placeholder_pattern.findall(p.text)
+                        all_placeholders.update(matches)
+
+        # 识别val_results和col_results占位符
+        val_pattern = re.compile(r'val_results_(\w+)')
+        col_pattern = re.compile(r'col_results_(\w+)')
+
+        used_tables = set(replacements.get('tables', {}).keys())
+
+        # 处理未使用的val_results占位符（表一）
+        for placeholder in all_placeholders:
+            match = val_pattern.match(placeholder)
+            if match:
+                full_placeholder = f'{{{{{placeholder}}}}}'
+                if full_placeholder not in used_tables:
+                    # 填写检验类型和"/"
+                    var_name = match.group(1)
+                    _fill_unused_val_results(doc, var_name)
+
+        # 处理未使用的col_results占位符（表二）
+        for placeholder in all_placeholders:
+            match = col_pattern.match(placeholder)
+            if match:
+                full_placeholder = f'{{{{{placeholder}}}}}'
+                if full_placeholder not in used_tables:
+                    # 删除整行
+                    var_name = match.group(1)
+                    _delete_col_results_row(doc, var_name)
+
+    def _fill_unused_val_results(doc, var_name):
+        """为未使用的val_results占位符填写检验类型和"/" """
+        placeholder = f'{{{{val_results_{var_name}}}}}'
+
+        # 填充表格：检验类型 | / | /
+        # 由于是未使用的占位符，我们无法确定具体的检验类型，使用通用值
+        val_results = [['未配置检验', '/', '/']]
+        _fill_table(doc, placeholder, val_results)
+
+    def _delete_col_results_row(doc, var_name):
+        """删除未使用的col_results占位符所在的整行"""
+        placeholder = f'{{{{col_results_{var_name}}}}}'
+
+        # 遍历所有表格，找到包含此占位符的行并删除
+        for table in doc.tables:
+            rows_to_delete = []
+            for i, row in enumerate(table.rows):
+                for cell in row.cells:
+                    if placeholder in cell.text:
+                        rows_to_delete.append(i)
+                        break
+
+            # 从后往前删除行，避免索引变化
+            for row_idx in sorted(rows_to_delete, reverse=True):
+                table._element.remove(table.rows[row_idx]._element)
+
     def fill_template(template_path, output_docx, output_pdf, replacements):
         """
         自动填充Word模板并转换为PDF
@@ -2848,6 +2926,9 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         if 'images' in replacements:
             for placeholder, image_path in replacements['images'].items():
                 _insert_image(doc, placeholder, image_path)
+
+        # 处理模板中未使用的占位符
+        _handle_unused_placeholders(doc, replacements)
 
         # 对于现场数据报告，将所有 "XC卫星" 和 "XC" 替换为 "现场"
         _replace_text(doc, 'XC卫星', '现场')
