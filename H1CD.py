@@ -4318,48 +4318,63 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
     def _remove_empty_subsections_and_renumber(doc):
         """
-        删除没有图片的小节，并重新编号所有小节
-        识别规则：小节标题通常包含数字编号（如"3.1"、"3.2"等）
+        删除所有没有图片和实质内容的小节，并重新编号
+        识别规则：小节标题格式为"X.Y"（如"3.1"、"8.2"、"10.1"等）
         """
         import re
+        from collections import defaultdict
 
         # 第一步：找出需要删除的段落范围
         paragraphs_to_delete = []
-        subsection_starts = []  # 记录所有小节开始的段落索引
+        subsection_info = []  # 记录所有小节信息：(para_idx, chapter, subsection, text)
 
-        # 识别所有小节标题（通常是3.x格式）
-        subsection_pattern = re.compile(r'^3\.\d+')
+        # 识别所有小节标题（X.Y格式，如3.1、8.2、10.1等）
+        subsection_pattern = re.compile(r'^(\d+)\.(\d+)')
 
         for i, para in enumerate(doc.paragraphs):
             text = para.text.strip()
             # 检查是否是小节标题
-            if subsection_pattern.match(text):
-                subsection_starts.append(i)
+            match = subsection_pattern.match(text)
+            if match:
+                chapter = int(match.group(1))
+                subsection = int(match.group(2))
+                subsection_info.append((i, chapter, subsection, text))
 
         # 第二步：检查每个小节是否包含内容（非空段落或有实际内容）
-        for idx in range(len(subsection_starts)):
-            start_idx = subsection_starts[idx]
+        for idx in range(len(subsection_info)):
+            start_idx = subsection_info[idx][0]
             # 确定小节结束位置（下一个小节开始前，或文档结束）
-            end_idx = subsection_starts[idx + 1] if idx + 1 < len(subsection_starts) else len(doc.paragraphs)
+            end_idx = subsection_info[idx + 1][0] if idx + 1 < len(subsection_info) else len(doc.paragraphs)
 
             # 检查这个小节是否为空（只有标题，没有其他有意义内容）
             has_content = False
             for para_idx in range(start_idx + 1, end_idx):
                 if para_idx < len(doc.paragraphs):
                     para = doc.paragraphs[para_idx]
-                    # 检查段落是否有文本内容（排除只有空白的段落）
-                    if para.text.strip() and not para.text.strip().startswith('3.'):
-                        # 检查是否包含图片
-                        has_image = False
-                        for run in para.runs:
-                            if hasattr(run, '_element'):
-                                drawings = run._element.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}drawing')
-                                if drawings:
-                                    has_image = True
-                                    break
-                        if has_image or len(para.text.strip()) > 5:  # 有图片或有实质内容
-                            has_content = True
-                            break
+                    text = para.text.strip()
+
+                    # 跳过空白和其他小节标题
+                    if not text or subsection_pattern.match(text):
+                        continue
+
+                    # 检查是否包含图片
+                    has_image = False
+                    for run in para.runs:
+                        if hasattr(run, '_element'):
+                            drawings = run._element.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}drawing')
+                            if drawings:
+                                has_image = True
+                                break
+
+                    # 如果有图片或有实质内容（排除占位符）
+                    if has_image:
+                        has_content = True
+                        break
+
+                    # 检查是否只是占位符（包含{{}}的文本）
+                    if '{{' not in text and len(text) > 5:
+                        has_content = True
+                        break
 
             # 如果小节为空，标记删除该范围的所有段落
             if not has_content:
@@ -4374,17 +4389,18 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                 p_element = p._element
                 p_element.getparent().remove(p_element)
 
-        # 第四步：重新编号所有小节
-        subsection_counter = 1
+        # 第四步：重新编号所有小节（按章节分组）
+        chapter_counters = defaultdict(int)
+
         for para in doc.paragraphs:
             text = para.text.strip()
-            # 匹配3.x格式的标题
             match = subsection_pattern.match(text)
             if match:
+                chapter = int(match.group(1))
+                chapter_counters[chapter] += 1
                 # 替换为新的编号
-                new_text = re.sub(r'^3\.\d+', f'3.{subsection_counter}', text)
+                new_text = re.sub(r'^\d+\.\d+', f'{chapter}.{chapter_counters[chapter]}', text)
                 para.text = new_text
-                subsection_counter += 1
 
     def _handle_unused_placeholders(doc, replacements):
         """
@@ -4852,48 +4868,63 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
 
     def _remove_empty_subsections_and_renumber(doc):
         """
-        删除没有图片的小节，并重新编号所有小节
-        识别规则：小节标题通常包含数字编号（如"3.1"、"3.2"等）
+        删除所有没有图片和实质内容的小节，并重新编号
+        识别规则：小节标题格式为"X.Y"（如"3.1"、"8.2"、"10.1"等）
         """
         import re
+        from collections import defaultdict
 
         # 第一步：找出需要删除的段落范围
         paragraphs_to_delete = []
-        subsection_starts = []  # 记录所有小节开始的段落索引
+        subsection_info = []  # 记录所有小节信息：(para_idx, chapter, subsection, text)
 
-        # 识别所有小节标题（通常是3.x格式）
-        subsection_pattern = re.compile(r'^3\.\d+')
+        # 识别所有小节标题（X.Y格式，如3.1、8.2、10.1等）
+        subsection_pattern = re.compile(r'^(\d+)\.(\d+)')
 
         for i, para in enumerate(doc.paragraphs):
             text = para.text.strip()
             # 检查是否是小节标题
-            if subsection_pattern.match(text):
-                subsection_starts.append(i)
+            match = subsection_pattern.match(text)
+            if match:
+                chapter = int(match.group(1))
+                subsection = int(match.group(2))
+                subsection_info.append((i, chapter, subsection, text))
 
         # 第二步：检查每个小节是否包含内容（非空段落或有实际内容）
-        for idx in range(len(subsection_starts)):
-            start_idx = subsection_starts[idx]
+        for idx in range(len(subsection_info)):
+            start_idx = subsection_info[idx][0]
             # 确定小节结束位置（下一个小节开始前，或文档结束）
-            end_idx = subsection_starts[idx + 1] if idx + 1 < len(subsection_starts) else len(doc.paragraphs)
+            end_idx = subsection_info[idx + 1][0] if idx + 1 < len(subsection_info) else len(doc.paragraphs)
 
             # 检查这个小节是否为空（只有标题，没有其他有意义内容）
             has_content = False
             for para_idx in range(start_idx + 1, end_idx):
                 if para_idx < len(doc.paragraphs):
                     para = doc.paragraphs[para_idx]
-                    # 检查段落是否有文本内容（排除只有空白的段落）
-                    if para.text.strip() and not para.text.strip().startswith('3.'):
-                        # 检查是否包含图片
-                        has_image = False
-                        for run in para.runs:
-                            if hasattr(run, '_element'):
-                                drawings = run._element.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}drawing')
-                                if drawings:
-                                    has_image = True
-                                    break
-                        if has_image or len(para.text.strip()) > 5:  # 有图片或有实质内容
-                            has_content = True
-                            break
+                    text = para.text.strip()
+
+                    # 跳过空白和其他小节标题
+                    if not text or subsection_pattern.match(text):
+                        continue
+
+                    # 检查是否包含图片
+                    has_image = False
+                    for run in para.runs:
+                        if hasattr(run, '_element'):
+                            drawings = run._element.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}drawing')
+                            if drawings:
+                                has_image = True
+                                break
+
+                    # 如果有图片或有实质内容（排除占位符）
+                    if has_image:
+                        has_content = True
+                        break
+
+                    # 检查是否只是占位符（包含{{}}的文本）
+                    if '{{' not in text and len(text) > 5:
+                        has_content = True
+                        break
 
             # 如果小节为空，标记删除该范围的所有段落
             if not has_content:
@@ -4908,17 +4939,18 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
                 p_element = p._element
                 p_element.getparent().remove(p_element)
 
-        # 第四步：重新编号所有小节
-        subsection_counter = 1
+        # 第四步：重新编号所有小节（按章节分组）
+        chapter_counters = defaultdict(int)
+
         for para in doc.paragraphs:
             text = para.text.strip()
-            # 匹配3.x格式的标题
             match = subsection_pattern.match(text)
             if match:
+                chapter = int(match.group(1))
+                chapter_counters[chapter] += 1
                 # 替换为新的编号
-                new_text = re.sub(r'^3\.\d+', f'3.{subsection_counter}', text)
+                new_text = re.sub(r'^\d+\.\d+', f'{chapter}.{chapter_counters[chapter]}', text)
                 para.text = new_text
-                subsection_counter += 1
 
     def _handle_unused_placeholders(doc, replacements):
         """
