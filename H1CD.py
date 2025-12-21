@@ -4324,6 +4324,10 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         import re
         from collections import defaultdict
 
+        print("\n" + "="*80)
+        print("【调试】开始删除空小节并重新编号")
+        print("="*80)
+
         # 第一步：找出需要删除的段落范围
         paragraphs_to_delete = []
         subsection_info = []  # 记录所有小节信息：(para_idx, chapter, subsection, text)
@@ -4340,14 +4344,27 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                 subsection = int(match.group(2))
                 subsection_info.append((i, chapter, subsection, text))
 
+        print(f"\n【调试】找到 {len(subsection_info)} 个小节标题")
+        for para_idx, chapter, subsection, text in subsection_info:
+            print(f"  {chapter}.{subsection}: {text[:50]}...")
+
         # 第二步：检查每个小节是否包含内容（非空段落或有实际内容）
+        empty_subsections = []
         for idx in range(len(subsection_info)):
             start_idx = subsection_info[idx][0]
+            chapter = subsection_info[idx][1]
+            subsection = subsection_info[idx][2]
+            title = subsection_info[idx][3]
+
             # 确定小节结束位置（下一个小节开始前，或文档结束）
             end_idx = subsection_info[idx + 1][0] if idx + 1 < len(subsection_info) else len(doc.paragraphs)
 
             # 检查这个小节是否为空（只有标题，没有其他有意义内容）
             has_content = False
+            has_image = False
+            has_placeholder = False
+            content_details = []
+
             for para_idx in range(start_idx + 1, end_idx):
                 if para_idx < len(doc.paragraphs):
                     para = doc.paragraphs[para_idx]
@@ -4358,12 +4375,12 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                         continue
 
                     # 检查是否包含图片
-                    has_image = False
                     for run in para.runs:
                         if hasattr(run, '_element'):
                             drawings = run._element.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}drawing')
                             if drawings:
                                 has_image = True
+                                content_details.append(f"图片")
                                 break
 
                     # 如果有图片或有实质内容（排除占位符）
@@ -4372,24 +4389,43 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                         break
 
                     # 检查是否只是占位符（包含{{}}的文本）
-                    if '{{' not in text and len(text) > 5:
+                    if '{{' in text:
+                        has_placeholder = True
+                        content_details.append(f"占位符: {text[:40]}...")
+                    elif len(text) > 5:
                         has_content = True
+                        content_details.append(f"文本: {text[:40]}...")
                         break
 
             # 如果小节为空，标记删除该范围的所有段落
             if not has_content:
+                empty_subsections.append((chapter, subsection, title))
+                print(f"\n【调试】小节 {chapter}.{subsection} 标记为删除:")
+                print(f"  标题: {title}")
+                print(f"  包含图片: {has_image}")
+                print(f"  包含占位符: {has_placeholder}")
+                print(f"  内容详情: {content_details if content_details else '无'}")
+
                 for para_idx in range(start_idx, end_idx):
                     if para_idx not in paragraphs_to_delete and para_idx < len(doc.paragraphs):
                         paragraphs_to_delete.append(para_idx)
 
+        print(f"\n【调试】共标记 {len(empty_subsections)} 个小节待删除:")
+        for chapter, subsection, title in empty_subsections:
+            print(f"  {chapter}.{subsection}: {title[:50]}...")
+
         # 第三步：删除标记的段落（从后往前删，避免索引变化）
+        print(f"\n【调试】开始删除 {len(paragraphs_to_delete)} 个段落...")
         for para_idx in sorted(paragraphs_to_delete, reverse=True):
             if para_idx < len(doc.paragraphs):
                 p = doc.paragraphs[para_idx]
                 p_element = p._element
                 p_element.getparent().remove(p_element)
 
+        print(f"【调试】删除完成")
+
         # 第四步：重新编号所有小节（按章节分组）
+        print(f"\n【调试】开始重新编号小节...")
         chapter_counters = defaultdict(int)
 
         for para in doc.paragraphs:
@@ -4399,8 +4435,16 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                 chapter = int(match.group(1))
                 chapter_counters[chapter] += 1
                 # 替换为新的编号
+                old_text = text
                 new_text = re.sub(r'^\d+\.\d+', f'{chapter}.{chapter_counters[chapter]}', text)
                 para.text = new_text
+                if old_text != new_text:
+                    print(f"  重新编号: {old_text[:40]}... -> {new_text[:40]}...")
+
+        print("\n" + "="*80)
+        print("【调试】空小节删除和重新编号完成")
+        print("="*80 + "\n")
+
 
     def _handle_unused_placeholders(doc, replacements):
         """
@@ -4411,14 +4455,36 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         """
         import re
 
+        print("\n" + "="*80)
+        print("【调试】开始处理未使用的占位符")
+        print("="*80)
+
         # 扫描所有占位符
         all_placeholders = set()
         placeholder_pattern = re.compile(r'\{\{([^}]+)\}\}')
 
-        # 从所有段落中提取占位符
-        for p in doc.paragraphs:
+        # 从所有段落中提取占位符（记录章节信息）
+        chapter_placeholders = {}  # {placeholder: [章节列表]}
+        chapter_pattern = re.compile(r'^(\d+)[\.\s]')  # 匹配章节号
+
+        current_chapter = None
+        for i, p in enumerate(doc.paragraphs):
+            text = p.text.strip()
+
+            # 检测章节标题
+            chapter_match = chapter_pattern.match(text)
+            if chapter_match:
+                current_chapter = int(chapter_match.group(1))
+
+            # 提取占位符
             matches = placeholder_pattern.findall(p.text)
-            all_placeholders.update(matches)
+            for match in matches:
+                all_placeholders.add(match)
+                if current_chapter and current_chapter >= 3:  # 只记录第3章及以后
+                    if match not in chapter_placeholders:
+                        chapter_placeholders[match] = []
+                    if current_chapter not in chapter_placeholders[match]:
+                        chapter_placeholders[match].append(current_chapter)
 
         # 从所有表格中提取占位符
         for table in doc.tables:
@@ -4428,11 +4494,58 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                         matches = placeholder_pattern.findall(p.text)
                         all_placeholders.update(matches)
 
+        print(f"\n【调试】模板中发现的所有占位符总数: {len(all_placeholders)}")
+
+        # 按类型分类占位符
+        image_placeholders = [p for p in all_placeholders if any(x in p for x in ['_sct', '_geo', '_map', '_chart'])]
+        val_placeholders = [p for p in all_placeholders if p.startswith('val_results_')]
+        col_placeholders = [p for p in all_placeholders if p.startswith('col_results_')]
+        other_placeholders = [p for p in all_placeholders if p not in image_placeholders and p not in val_placeholders and p not in col_placeholders]
+
+        print(f"  - 图片占位符: {len(image_placeholders)}")
+        print(f"  - 表一占位符 (val_results): {len(val_placeholders)}")
+        print(f"  - 表二占位符 (col_results): {len(col_placeholders)}")
+        print(f"  - 其他占位符: {len(other_placeholders)}")
+
+        # 输出第3章及以后的占位符
+        print(f"\n【调试】第3章及以后的占位符分布:")
+        for placeholder, chapters in sorted(chapter_placeholders.items()):
+            chapters_str = ', '.join([f"第{ch}章" for ch in sorted(chapters)])
+            print(f"  {{{{{{placeholder}}}}}}: {chapters_str}")
+
         # 识别val_results和col_results占位符
         val_pattern = re.compile(r'val_results_(\w+)')
         col_pattern = re.compile(r'col_results_(\w+)')
 
         used_tables = set(replacements.get('tables', {}).keys())
+        used_images = set(replacements.get('images', {}).keys())
+
+        print(f"\n【调试】已使用的占位符:")
+        print(f"  - 表格占位符: {len(used_tables)}")
+        for placeholder in sorted(used_tables):
+            print(f"      {placeholder}")
+        print(f"  - 图片占位符: {len(used_images)}")
+        for placeholder in sorted(used_images):
+            print(f"      {placeholder}")
+
+        # 找出未使用的占位符
+        all_placeholders_with_braces = {f'{{{{{p}}}}}' for p in all_placeholders}
+        unused_placeholders = all_placeholders_with_braces - used_tables - used_images
+
+        print(f"\n【调试】未使用的占位符总数: {len(unused_placeholders)}")
+        unused_images = [p for p in unused_placeholders if any(x in p for x in ['_sct', '_geo', '_map', '_chart'])]
+        unused_vals = [p for p in unused_placeholders if 'val_results_' in p]
+        unused_cols = [p for p in unused_placeholders if 'col_results_' in p]
+
+        print(f"  - 未使用的图片占位符: {len(unused_images)}")
+        for p in sorted(unused_images):
+            print(f"      {p}")
+        print(f"  - 未使用的表一占位符: {len(unused_vals)}")
+        for p in sorted(unused_vals):
+            print(f"      {p}")
+        print(f"  - 未使用的表二占位符: {len(unused_cols)}")
+        for p in sorted(unused_cols):
+            print(f"      {p}")
 
         # 处理未使用的val_results占位符（表一）
         for placeholder in all_placeholders:
@@ -4442,6 +4555,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                 if full_placeholder not in used_tables:
                     # 填写检验类型和"/"
                     var_name = match.group(1)
+                    print(f"\n【调试】处理未使用的val_results: {full_placeholder}")
                     _fill_unused_val_results(doc, var_name)
 
         # 处理未使用的col_results占位符（表二）
@@ -4452,7 +4566,12 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                 if full_placeholder not in used_tables:
                     # 删除整行
                     var_name = match.group(1)
+                    print(f"【调试】删除未使用的col_results行: {full_placeholder}")
                     _delete_col_results_row(doc, var_name)
+
+        print("\n" + "="*80)
+        print("【调试】未使用占位符处理完成")
+        print("="*80 + "\n")
 
     def _fill_unused_val_results(doc, var_name):
         """为未使用的val_results占位符填写检验类型和"/" """
@@ -4874,6 +4993,10 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
         import re
         from collections import defaultdict
 
+        print("\n" + "="*80)
+        print("【调试】开始删除空小节并重新编号")
+        print("="*80)
+
         # 第一步：找出需要删除的段落范围
         paragraphs_to_delete = []
         subsection_info = []  # 记录所有小节信息：(para_idx, chapter, subsection, text)
@@ -4890,14 +5013,27 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
                 subsection = int(match.group(2))
                 subsection_info.append((i, chapter, subsection, text))
 
+        print(f"\n【调试】找到 {len(subsection_info)} 个小节标题")
+        for para_idx, chapter, subsection, text in subsection_info:
+            print(f"  {chapter}.{subsection}: {text[:50]}...")
+
         # 第二步：检查每个小节是否包含内容（非空段落或有实际内容）
+        empty_subsections = []
         for idx in range(len(subsection_info)):
             start_idx = subsection_info[idx][0]
+            chapter = subsection_info[idx][1]
+            subsection = subsection_info[idx][2]
+            title = subsection_info[idx][3]
+
             # 确定小节结束位置（下一个小节开始前，或文档结束）
             end_idx = subsection_info[idx + 1][0] if idx + 1 < len(subsection_info) else len(doc.paragraphs)
 
             # 检查这个小节是否为空（只有标题，没有其他有意义内容）
             has_content = False
+            has_image = False
+            has_placeholder = False
+            content_details = []
+
             for para_idx in range(start_idx + 1, end_idx):
                 if para_idx < len(doc.paragraphs):
                     para = doc.paragraphs[para_idx]
@@ -4908,12 +5044,12 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
                         continue
 
                     # 检查是否包含图片
-                    has_image = False
                     for run in para.runs:
                         if hasattr(run, '_element'):
                             drawings = run._element.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}drawing')
                             if drawings:
                                 has_image = True
+                                content_details.append(f"图片")
                                 break
 
                     # 如果有图片或有实质内容（排除占位符）
@@ -4922,24 +5058,43 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
                         break
 
                     # 检查是否只是占位符（包含{{}}的文本）
-                    if '{{' not in text and len(text) > 5:
+                    if '{{' in text:
+                        has_placeholder = True
+                        content_details.append(f"占位符: {text[:40]}...")
+                    elif len(text) > 5:
                         has_content = True
+                        content_details.append(f"文本: {text[:40]}...")
                         break
 
             # 如果小节为空，标记删除该范围的所有段落
             if not has_content:
+                empty_subsections.append((chapter, subsection, title))
+                print(f"\n【调试】小节 {chapter}.{subsection} 标记为删除:")
+                print(f"  标题: {title}")
+                print(f"  包含图片: {has_image}")
+                print(f"  包含占位符: {has_placeholder}")
+                print(f"  内容详情: {content_details if content_details else '无'}")
+
                 for para_idx in range(start_idx, end_idx):
                     if para_idx not in paragraphs_to_delete and para_idx < len(doc.paragraphs):
                         paragraphs_to_delete.append(para_idx)
 
+        print(f"\n【调试】共标记 {len(empty_subsections)} 个小节待删除:")
+        for chapter, subsection, title in empty_subsections:
+            print(f"  {chapter}.{subsection}: {title[:50]}...")
+
         # 第三步：删除标记的段落（从后往前删，避免索引变化）
+        print(f"\n【调试】开始删除 {len(paragraphs_to_delete)} 个段落...")
         for para_idx in sorted(paragraphs_to_delete, reverse=True):
             if para_idx < len(doc.paragraphs):
                 p = doc.paragraphs[para_idx]
                 p_element = p._element
                 p_element.getparent().remove(p_element)
 
+        print(f"【调试】删除完成")
+
         # 第四步：重新编号所有小节（按章节分组）
+        print(f"\n【调试】开始重新编号小节...")
         chapter_counters = defaultdict(int)
 
         for para in doc.paragraphs:
@@ -4949,8 +5104,16 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
                 chapter = int(match.group(1))
                 chapter_counters[chapter] += 1
                 # 替换为新的编号
+                old_text = text
                 new_text = re.sub(r'^\d+\.\d+', f'{chapter}.{chapter_counters[chapter]}', text)
                 para.text = new_text
+                if old_text != new_text:
+                    print(f"  重新编号: {old_text[:40]}... -> {new_text[:40]}...")
+
+        print("\n" + "="*80)
+        print("【调试】空小节删除和重新编号完成")
+        print("="*80 + "\n")
+
 
     def _handle_unused_placeholders(doc, replacements):
         """
@@ -4961,14 +5124,36 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
         """
         import re
 
+        print("\n" + "="*80)
+        print("【调试】开始处理未使用的占位符")
+        print("="*80)
+
         # 扫描所有占位符
         all_placeholders = set()
         placeholder_pattern = re.compile(r'\{\{([^}]+)\}\}')
 
-        # 从所有段落中提取占位符
-        for p in doc.paragraphs:
+        # 从所有段落中提取占位符（记录章节信息）
+        chapter_placeholders = {}  # {placeholder: [章节列表]}
+        chapter_pattern = re.compile(r'^(\d+)[\.\s]')  # 匹配章节号
+
+        current_chapter = None
+        for i, p in enumerate(doc.paragraphs):
+            text = p.text.strip()
+
+            # 检测章节标题
+            chapter_match = chapter_pattern.match(text)
+            if chapter_match:
+                current_chapter = int(chapter_match.group(1))
+
+            # 提取占位符
             matches = placeholder_pattern.findall(p.text)
-            all_placeholders.update(matches)
+            for match in matches:
+                all_placeholders.add(match)
+                if current_chapter and current_chapter >= 3:  # 只记录第3章及以后
+                    if match not in chapter_placeholders:
+                        chapter_placeholders[match] = []
+                    if current_chapter not in chapter_placeholders[match]:
+                        chapter_placeholders[match].append(current_chapter)
 
         # 从所有表格中提取占位符
         for table in doc.tables:
@@ -4978,11 +5163,58 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
                         matches = placeholder_pattern.findall(p.text)
                         all_placeholders.update(matches)
 
+        print(f"\n【调试】模板中发现的所有占位符总数: {len(all_placeholders)}")
+
+        # 按类型分类占位符
+        image_placeholders = [p for p in all_placeholders if any(x in p for x in ['_sct', '_geo', '_map', '_chart'])]
+        val_placeholders = [p for p in all_placeholders if p.startswith('val_results_')]
+        col_placeholders = [p for p in all_placeholders if p.startswith('col_results_')]
+        other_placeholders = [p for p in all_placeholders if p not in image_placeholders and p not in val_placeholders and p not in col_placeholders]
+
+        print(f"  - 图片占位符: {len(image_placeholders)}")
+        print(f"  - 表一占位符 (val_results): {len(val_placeholders)}")
+        print(f"  - 表二占位符 (col_results): {len(col_placeholders)}")
+        print(f"  - 其他占位符: {len(other_placeholders)}")
+
+        # 输出第3章及以后的占位符
+        print(f"\n【调试】第3章及以后的占位符分布:")
+        for placeholder, chapters in sorted(chapter_placeholders.items()):
+            chapters_str = ', '.join([f"第{ch}章" for ch in sorted(chapters)])
+            print(f"  {{{{{{placeholder}}}}}}: {chapters_str}")
+
         # 识别val_results和col_results占位符
         val_pattern = re.compile(r'val_results_(\w+)')
         col_pattern = re.compile(r'col_results_(\w+)')
 
         used_tables = set(replacements.get('tables', {}).keys())
+        used_images = set(replacements.get('images', {}).keys())
+
+        print(f"\n【调试】已使用的占位符:")
+        print(f"  - 表格占位符: {len(used_tables)}")
+        for placeholder in sorted(used_tables):
+            print(f"      {placeholder}")
+        print(f"  - 图片占位符: {len(used_images)}")
+        for placeholder in sorted(used_images):
+            print(f"      {placeholder}")
+
+        # 找出未使用的占位符
+        all_placeholders_with_braces = {f'{{{{{p}}}}}' for p in all_placeholders}
+        unused_placeholders = all_placeholders_with_braces - used_tables - used_images
+
+        print(f"\n【调试】未使用的占位符总数: {len(unused_placeholders)}")
+        unused_images = [p for p in unused_placeholders if any(x in p for x in ['_sct', '_geo', '_map', '_chart'])]
+        unused_vals = [p for p in unused_placeholders if 'val_results_' in p]
+        unused_cols = [p for p in unused_placeholders if 'col_results_' in p]
+
+        print(f"  - 未使用的图片占位符: {len(unused_images)}")
+        for p in sorted(unused_images):
+            print(f"      {p}")
+        print(f"  - 未使用的表一占位符: {len(unused_vals)}")
+        for p in sorted(unused_vals):
+            print(f"      {p}")
+        print(f"  - 未使用的表二占位符: {len(unused_cols)}")
+        for p in sorted(unused_cols):
+            print(f"      {p}")
 
         # 处理未使用的val_results占位符（表一）
         for placeholder in all_placeholders:
@@ -4992,6 +5224,7 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
                 if full_placeholder not in used_tables:
                     # 填写检验类型和"/"
                     var_name = match.group(1)
+                    print(f"\n【调试】处理未使用的val_results: {full_placeholder}")
                     _fill_unused_val_results(doc, var_name)
 
         # 处理未使用的col_results占位符（表二）
@@ -5002,7 +5235,12 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
                 if full_placeholder not in used_tables:
                     # 删除整行
                     var_name = match.group(1)
+                    print(f"【调试】删除未使用的col_results行: {full_placeholder}")
                     _delete_col_results_row(doc, var_name)
+
+        print("\n" + "="*80)
+        print("【调试】未使用占位符处理完成")
+        print("="*80 + "\n")
 
     def _fill_unused_val_results(doc, var_name):
         """为未使用的val_results占位符填写检验类型和"/" """
