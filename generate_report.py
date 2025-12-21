@@ -1015,11 +1015,7 @@ class TemplateFiller:
                     para = doc.paragraphs[para_idx]
                     text = para.text.strip()
 
-                    # 跳过空白和其他小节标题
-                    if not text or subsection_pattern.match(text):
-                        continue
-
-                    # 检查是否包含图片
+                    # 先检查是否包含图片（即使文本为空也要检查，因为插入图片后文本会被清空）
                     for run in para.runs:
                         if hasattr(run, '_element'):
                             drawings = run._element.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}drawing')
@@ -1032,6 +1028,10 @@ class TemplateFiller:
                     if has_image:
                         has_content = True
                         break
+
+                    # 跳过空白和其他小节标题
+                    if not text or subsection_pattern.match(text):
+                        continue
 
                     # 检查是否只是占位符（包含{{}}的文本）
                     if '{{' in text:
