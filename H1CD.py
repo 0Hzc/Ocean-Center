@@ -4303,18 +4303,30 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
         # 清理段落中的占位符
         for p in doc.paragraphs:
-            for run in p.runs:
-                if placeholder_pattern.search(run.text):
-                    run.text = placeholder_pattern.sub('', run.text)
+            # 检查段落的整体文本（处理占位符跨多个run的情况）
+            if placeholder_pattern.search(p.text):
+                cleaned_text = placeholder_pattern.sub('', p.text)
+                # 清空所有run并设置新文本
+                for run in p.runs:
+                    run.text = ''
+                if cleaned_text.strip():  # 如果清理后还有文本
+                    p.runs[0].text = cleaned_text
+                elif p.runs:  # 如果清理后没有文本，保持空段落
+                    p.runs[0].text = cleaned_text
 
         # 清理表格中的占位符
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for p in cell.paragraphs:
-                        for run in p.runs:
-                            if placeholder_pattern.search(run.text):
-                                run.text = placeholder_pattern.sub('', run.text)
+                        # 检查段落的整体文本
+                        if placeholder_pattern.search(p.text):
+                            cleaned_text = placeholder_pattern.sub('', p.text)
+                            # 清空所有run并设置新文本
+                            for run in p.runs:
+                                run.text = ''
+                            if p.runs:
+                                p.runs[0].text = cleaned_text
 
     def _remove_empty_subsections_and_renumber(doc):
         """
@@ -4981,18 +4993,30 @@ def step_xc_report(datestr, input_temp, input_img, coldata_path, output_path, sa
 
         # 清理段落中的占位符
         for p in doc.paragraphs:
-            for run in p.runs:
-                if placeholder_pattern.search(run.text):
-                    run.text = placeholder_pattern.sub('', run.text)
+            # 检查段落的整体文本（处理占位符跨多个run的情况）
+            if placeholder_pattern.search(p.text):
+                cleaned_text = placeholder_pattern.sub('', p.text)
+                # 清空所有run并设置新文本
+                for run in p.runs:
+                    run.text = ''
+                if cleaned_text.strip():  # 如果清理后还有文本
+                    p.runs[0].text = cleaned_text
+                elif p.runs:  # 如果清理后没有文本，保持空段落
+                    p.runs[0].text = cleaned_text
 
         # 清理表格中的占位符
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for p in cell.paragraphs:
-                        for run in p.runs:
-                            if placeholder_pattern.search(run.text):
-                                run.text = placeholder_pattern.sub('', run.text)
+                        # 检查段落的整体文本
+                        if placeholder_pattern.search(p.text):
+                            cleaned_text = placeholder_pattern.sub('', p.text)
+                            # 清空所有run并设置新文本
+                            for run in p.runs:
+                                run.text = ''
+                            if p.runs:
+                                p.runs[0].text = cleaned_text
 
     def _remove_empty_subsections_and_renumber(doc):
         """
