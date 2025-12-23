@@ -1089,7 +1089,36 @@ class TemplateFiller:
         for chapter, subsection, title in empty_subsections:
             print(f"  {chapter}.{subsection}: {title[:50]}...")
 
-        # 第三步：删除标记的段落（从后往前删，避免索引变化）
+        # 第三步：识别空章节（所有小节都被删除的章节）
+        deleted_chapters = set()
+        for chapter, subsection, title in empty_subsections:
+            deleted_chapters.add(chapter)
+
+        # 检查每个章节是否所有小节都被删除
+        chapters_to_delete = set()
+        for chapter in deleted_chapters:
+            # 获取该章节的所有小节
+            chapter_subsections = [s for s in subsection_info if s[1] == chapter]
+            # 检查是否所有小节都被标记为删除
+            all_deleted = all((chapter, s[2], s[3]) in empty_subsections for s in chapter_subsections)
+            if all_deleted:
+                chapters_to_delete.add(chapter)
+
+        print(f"\n【调试】需要删除的空章节: {sorted(chapters_to_delete)}")
+
+        # 第四步：删除空章节标题
+        chapter_title_pattern = re.compile(r'^(\d+)\s+[^\d]')
+        for para in doc.paragraphs[:]:  # 使用副本遍历
+            text = para.text.strip()
+            match = chapter_title_pattern.match(text)
+            if match:
+                chapter_num = int(match.group(1))
+                if chapter_num in chapters_to_delete:
+                    print(f"【调试】删除章节标题: {text[:60]}...")
+                    p_element = para._element
+                    p_element.getparent().remove(p_element)
+
+        # 第五步：删除标记的小节段落（从后往前删，避免索引变化）
         print(f"\n【调试】开始删除 {len(paragraphs_to_delete)} 个段落...")
         for para_idx in sorted(paragraphs_to_delete, reverse=True):
             if para_idx < len(doc.paragraphs):
@@ -1099,22 +1128,68 @@ class TemplateFiller:
 
         print(f"【调试】删除完成")
 
-        # 第四步：重新编号所有小节（按章节分组）
-        print(f"\n【调试】开始重新编号小节...")
-        chapter_counters = defaultdict(int)
+        # 第六步：重新编号章节和小节
+        print(f"\n【调试】开始重新编号章节和小节...")
 
+        # 建立章节映射：旧章节号 -> 新章节号
+        remaining_chapters = []
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            match = chapter_title_pattern.match(text)
+            if match:
+                chapter_num = int(match.group(1))
+                if chapter_num >= 3 and chapter_num not in remaining_chapters:
+                    remaining_chapters.append(chapter_num)
+
+        chapter_mapping = {}
+        for new_num, old_num in enumerate(sorted(remaining_chapters), start=3):
+            chapter_mapping[old_num] = new_num
+
+        print(f"【调试】章节映射: {chapter_mapping}")
+
+        # 重新编号章节标题
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            match = chapter_title_pattern.match(text)
+            if match:
+                old_chapter = int(match.group(1))
+                if old_chapter in chapter_mapping:
+                    new_chapter = chapter_mapping[old_chapter]
+                    if old_chapter != new_chapter:
+                        old_text = text
+                        new_text = re.sub(r'^\d+', str(new_chapter), text)
+                        para.text = new_text
+                        print(f"  重新编号章节: {old_text[:40]}... -> {new_text[:40]}...")
+
+        # 重新编号小节标题
+        chapter_counters = defaultdict(int)
         for para in doc.paragraphs:
             text = para.text.strip()
             match = subsection_pattern.match(text)
             if match:
-                chapter = int(match.group(1))
-                chapter_counters[chapter] += 1
-                # 替换为新的编号
+                old_chapter = int(match.group(1))
+                if old_chapter in chapter_mapping:
+                    new_chapter = chapter_mapping[old_chapter]
+                    chapter_counters[new_chapter] += 1
+                    old_text = text
+                    new_text = re.sub(r'^\d+\.\d+', f'{new_chapter}.{chapter_counters[new_chapter]}', text)
+                    para.text = new_text
+                    if old_text != new_text:
+                        print(f"  重新编号小节: {old_text[:40]}... -> {new_text[:40]}...")
+
+        # 第七步：重新编号图片标题
+        print(f"\n【调试】开始重新编号图片...")
+        figure_counter = 1
+        figure_pattern = re.compile(r'^图\s*\d+')
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if figure_pattern.match(text):
                 old_text = text
-                new_text = re.sub(r'^\d+\.\d+', f'{chapter}.{chapter_counters[chapter]}', text)
+                new_text = re.sub(r'^图\s*\d+', f'图{figure_counter}', text)
                 para.text = new_text
                 if old_text != new_text:
-                    print(f"  重新编号: {old_text[:40]}... -> {new_text[:40]}...")
+                    print(f"  重新编号图片: {old_text[:50]}... -> {new_text[:50]}...")
+                figure_counter += 1
 
         print("\n" + "="*80)
         print("【调试】空小节删除和重新编号完成")
