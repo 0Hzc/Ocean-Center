@@ -2799,6 +2799,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
         # 第二步：检查每个小节是否包含内容（非空段落或有实际内容）
         empty_subsections = []
+        print(f"\n【调试】开始检查每个小节的内容...")
         for idx in range(len(subsection_info)):
             start_idx = subsection_info[idx][0]
             chapter = subsection_info[idx][1]
@@ -2855,14 +2856,16 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                         content_details.append(f"文本: {text[:40]}...")
                         break
 
+            # 输出每个小节的检查结果（用于调试）
+            print(f"\n【调试】小节 {chapter}.{subsection}:")
+            print(f"  标题: {title[:60]}...")
+            print(f"  有内容: {has_content}, 有图片: {has_image}, 有占位符: {has_placeholder}")
+            print(f"  内容详情: {content_details if content_details else '无'}")
+
             # 如果小节为空，标记删除该范围的所有段落
             if not has_content:
                 empty_subsections.append((chapter, subsection, title))
-                print(f"\n【调试】小节 {chapter}.{subsection} 标记为删除:")
-                print(f"  标题: {title}")
-                print(f"  包含图片: {has_image}")
-                print(f"  包含占位符: {has_placeholder}")
-                print(f"  内容详情: {content_details if content_details else '无'}")
+                print(f"  >>> 标记为删除")
 
                 for para_idx in range(start_idx, end_idx):
                     if para_idx not in paragraphs_to_delete and para_idx < len(doc.paragraphs):
