@@ -1042,8 +1042,14 @@ class TemplateFiller:
                         has_content = True
                         break
 
-                    # 跳过空白和其他小节标题
+                    # 跳过空白、小节标题和章节标题
                     if not text or subsection_pattern.match(text):
+                        continue
+
+                    # 跳过章节标题（格式：数字 + 空格 + 文字，如"8 HY1C水色水温扫描仪..."）
+                    chapter_title_pattern = re.compile(r'^\d+\s+[^\d]')
+                    if chapter_title_pattern.match(text):
+                        content_details.append(f"章节标题: {text[:40]}...")
                         continue
 
                     # 检查是否只是占位符（包含{{}}的文本）
