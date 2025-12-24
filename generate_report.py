@@ -986,8 +986,8 @@ class TemplateFiller:
         print("="*80)
 
         # 第一步：找出需要删除的段落范围
-        paragraphs_to_delete = []
-        subsection_info = []  # 记录所有小节信息：(para_idx, chapter, subsection, text)
+        paragraphs_to_delete_objs = []  # 存储段落对象而不是索引
+        subsection_info = []  # 记录所有小节信息：(para_idx, para_obj, chapter, subsection, text)
 
         # 识别所有小节标题（X.Y格式，如3.1、8.2、10.1等）
         subsection_pattern = re.compile(r'^(\d+)\.(\d+)')
@@ -999,10 +999,10 @@ class TemplateFiller:
             if match:
                 chapter = int(match.group(1))
                 subsection = int(match.group(2))
-                subsection_info.append((i, chapter, subsection, text))
+                subsection_info.append((i, para, chapter, subsection, text))
 
         print(f"\n【调试】找到 {len(subsection_info)} 个小节标题")
-        for para_idx, chapter, subsection, text in subsection_info:
+        for para_idx, para_obj, chapter, subsection, text in subsection_info:
             print(f"  {chapter}.{subsection}: {text[:50]}...")
 
         # 第二步：检查每个小节是否包含内容（非空段落或有实际内容）
@@ -1010,9 +1010,10 @@ class TemplateFiller:
         print(f"\n【调试】开始检查每个小节的内容...")
         for idx in range(len(subsection_info)):
             start_idx = subsection_info[idx][0]
-            chapter = subsection_info[idx][1]
-            subsection = subsection_info[idx][2]
-            title = subsection_info[idx][3]
+            start_para_obj = subsection_info[idx][1]
+            chapter = subsection_info[idx][2]
+            subsection = subsection_info[idx][3]
+            title = subsection_info[idx][4]
 
             # 确定小节结束位置（下一个小节开始前，或文档结束）
             end_idx = subsection_info[idx + 1][0] if idx + 1 < len(subsection_info) else len(doc.paragraphs)
@@ -1081,9 +1082,12 @@ class TemplateFiller:
                 empty_subsections.append((chapter, subsection, title))
                 print(f"  >>> 标记为删除")
 
+                # 收集要删除的段落对象（包括小节标题）
                 for para_idx in range(start_idx, end_idx):
-                    if para_idx not in paragraphs_to_delete and para_idx < len(doc.paragraphs):
-                        paragraphs_to_delete.append(para_idx)
+                    if para_idx < len(doc.paragraphs):
+                        para_obj = doc.paragraphs[para_idx]
+                        if para_obj not in paragraphs_to_delete_objs:
+                            paragraphs_to_delete_objs.append(para_obj)
 
         print(f"\n【调试】共标记 {len(empty_subsections)} 个小节待删除:")
         for chapter, subsection, title in empty_subsections:
@@ -1098,33 +1102,35 @@ class TemplateFiller:
         chapters_to_delete = set()
         for chapter in deleted_chapters:
             # 获取该章节的所有小节
-            chapter_subsections = [s for s in subsection_info if s[1] == chapter]
+            chapter_subsections = [s for s in subsection_info if s[2] == chapter]
             # 检查是否所有小节都被标记为删除
-            all_deleted = all((chapter, s[2], s[3]) in empty_subsections for s in chapter_subsections)
+            all_deleted = all((chapter, s[3], s[4]) in empty_subsections for s in chapter_subsections)
             if all_deleted:
                 chapters_to_delete.add(chapter)
 
         print(f"\n【调试】需要删除的空章节: {sorted(chapters_to_delete)}")
 
-        # 第四步：删除空章节标题
+        # 第四步：收集章节标题对象
         chapter_title_pattern = re.compile(r'^(\d+)\s+[^\d]')
-        for para in doc.paragraphs[:]:  # 使用副本遍历
+        for para in doc.paragraphs:
             text = para.text.strip()
             match = chapter_title_pattern.match(text)
             if match:
                 chapter_num = int(match.group(1))
                 if chapter_num in chapters_to_delete:
-                    print(f"【调试】删除章节标题: {text[:60]}...")
-                    p_element = para._element
-                    p_element.getparent().remove(p_element)
+                    print(f"【调试】标记删除章节标题: {text[:60]}...")
+                    if para not in paragraphs_to_delete_objs:
+                        paragraphs_to_delete_objs.append(para)
 
-        # 第五步：删除标记的小节段落（从后往前删，避免索引变化）
-        print(f"\n【调试】开始删除 {len(paragraphs_to_delete)} 个段落...")
-        for para_idx in sorted(paragraphs_to_delete, reverse=True):
-            if para_idx < len(doc.paragraphs):
-                p = doc.paragraphs[para_idx]
-                p_element = p._element
+        # 第五步：统一删除所有标记的段落（使用对象而不是索引）
+        print(f"\n【调试】开始删除 {len(paragraphs_to_delete_objs)} 个段落...")
+        for para_obj in paragraphs_to_delete_objs:
+            try:
+                p_element = para_obj._element
                 p_element.getparent().remove(p_element)
+            except Exception as e:
+                print(f"【警告】删除段落时出错: {e}")
+                continue
 
         print(f"【调试】删除完成")
 
