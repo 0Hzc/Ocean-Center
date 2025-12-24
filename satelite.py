@@ -2405,7 +2405,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
  # 定义产品配置
     # 定义HY1C_VAR_CONFIG（卫星间验证）
     HY1C_VAR_CONFIG = {
-        # 'sst': {'sources': ['HY1C'], 'unit': '℃', 'col_values': [25, 1800]},
+        # 'sst': {'sources': ['HY1C'], 'unit': 'K', 'col_values': [25, 1800]},
         # 'chl': {'sources': ['HY1C'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
         # 'Rrs412': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         # 'Rrs443': {'sources': ['HY1C'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
@@ -2420,7 +2420,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
     # 定义HY1D_VAR_CONFIG（卫星间验证）
     HY1D_VAR_CONFIG = {
-        # 'sst': {'sources': ['HY1D'], 'unit': '℃', 'col_values': [25, 1800]},
+        # 'sst': {'sources': ['HY1D'], 'unit': 'K', 'col_values': [25, 1800]},
         # 'chl': {'sources': ['HY1D'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
         # 'Rrs412': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         # 'Rrs443': {'sources': ['HY1D'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
@@ -2435,7 +2435,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
     # 定义HY1E_VAR_CONFIG（卫星间验证）
     HY1E_VAR_CONFIG = {
-        # 'sst': {'sources': ['HY1E'], 'unit': '℃', 'col_values': [25, 1800]},
+        # 'sst': {'sources': ['HY1E'], 'unit': 'K', 'col_values': [25, 1800]},
         # 'chl': {'sources': ['HY1E'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
         # 'Rrs412': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         # 'Rrs443': {'sources': ['HY1E'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
@@ -2551,10 +2551,20 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                 # 验证结果表格（表一）- n=0时不添加val_results，让cleanup清除占位符
                 if n > 0:
                     has_valid_data = True
+                    # 根据产品类型设置单位
+                    if var_name == 'sst':
+                        # 海温：bias和rms都用K（绝对误差）
+                        bias_str = f"{metrics[source]['bias']:.4f}{unit}"
+                        rms_str = f"{metrics[source]['rms']:.4f}{unit}"
+                    else:
+                        # 其他产品：bias用%（相对误差，需要乘100），rms用原单位
+                        bias_str = f"{metrics[source]['bias']*100:.2f}%"
+                        rms_str = f"{metrics[source]['rms']:.4f}{unit}"
+
                     val_results.append([
                         f'{satellite_type} vs {source}',
-                        f"{metrics[source]['bias']:.4f}{unit}",
-                        f"{metrics[source]['rms']:.4f}{unit}"
+                        bias_str,
+                        rms_str
                     ])
 
                 # 匹配结果表格（表二）- n=0时全部填0

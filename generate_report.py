@@ -43,7 +43,7 @@ except ImportError:
 
 VAR_CONFIGS = {
     'AQUA': {
-        'sst': {'sources': ['AQUA'], 'unit': '℃'},
+        'sst': {'sources': ['AQUA'], 'unit': 'K'},
         'chl': {'sources': ['AQUA'], 'unit': 'mg/m³'},
         'Rrs412': {'sources': ['AQUA'], 'unit': 'sr⁻¹'},
         'Rrs443': {'sources': ['AQUA'], 'unit': 'sr⁻¹'},
@@ -54,7 +54,7 @@ VAR_CONFIGS = {
         'AOT': {'sources': ['AQUA'], 'unit': ''},
     },
     'TERRA': {
-        'sst': {'sources': ['TERRA'], 'unit': '℃'},
+        'sst': {'sources': ['TERRA'], 'unit': 'K'},
         'chl': {'sources': ['TERRA'], 'unit': 'mg/m³'},
         'Rrs412': {'sources': ['TERRA'], 'unit': 'sr⁻¹'},
         'Rrs443': {'sources': ['TERRA'], 'unit': 'sr⁻¹'},
@@ -65,7 +65,7 @@ VAR_CONFIGS = {
         'AOT': {'sources': ['TERRA'], 'unit': ''},
     },
     'XC': {
-        'sst': {'sources': ['XC'], 'unit': '℃'},
+        'sst': {'sources': ['XC'], 'unit': 'K'},
         'chl': {'sources': ['XC'], 'unit': 'mg/m³'},
         'AOT': {'sources': ['XC'], 'unit': ''},
     }
@@ -643,10 +643,20 @@ class TemplateFiller:
 
                 # 验证结果表格（表一）- n=0时不添加，让cleanup清除占位符
                 if n > 0:
+                    # 根据产品类型设置单位
+                    if var_name == 'sst':
+                        # 海温：bias和rms都用K（绝对误差）
+                        bias_str = f"{data.get('bias', 0):.4f}{unit}"
+                        rms_str = f"{data.get('rms', 0):.4f}{unit}"
+                    else:
+                        # 其他产品：bias用%（相对误差，需要乘100），rms用原单位
+                        bias_str = f"{data.get('bias', 0)*100:.2f}%"
+                        rms_str = f"{data.get('rms', 0):.4f}{unit}"
+
                     val_results = [[
                         f'{satellite} vs {source}',
-                        f"{data.get('bias', 0):.4f}{unit}",
-                        f"{data.get('rms', 0):.4f}{unit}"
+                        bias_str,
+                        rms_str
                     ]]
                     replacements['tables'][f'{{{{val_results_{var_name}}}}}'] = val_results
 
