@@ -776,12 +776,15 @@ class TemplateFiller:
                     # 图片路径 - 占位符固定为terra
                     pie_key = f'hy1c_vs_{var_name}_terra_sct'
                     geo_key = f'hy1c_vs_{var_name}_terra_geo'
+                    timeseries_key = f'hy1c_vs_{var_name}_terra_timeseries'
 
                     pie_path = os.path.join(image_dir, f'{satellite}_COCTS_{source}_{var_name}_PIE_{timestamp}.jpg')
                     geo_path = os.path.join(image_dir, f'{satellite}_COCTS_{source}_{var_name}_GEO_{timestamp}.jpg')
+                    timeseries_path = os.path.join(image_dir, f'{satellite}_COCTS_{source}_{var_name.upper()}_TIMESERIES_{timestamp}.jpg')
 
                     replacements['images'][f'{{{{{pie_key}}}}}'] = pie_path
                     replacements['images'][f'{{{{{geo_key}}}}}'] = geo_path
+                    replacements['images'][f'{{{{{timeseries_key}}}}}'] = timeseries_path
 
                 replacements['text']['{{unit}}'] = config.get('unit', '')
         
