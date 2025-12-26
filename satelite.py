@@ -3111,6 +3111,10 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         for p in sorted(unused_cols):
             print(f"      {p}")
 
+        # 从replacements中提取卫星和数据源信息
+        satellite = replacements.get('text', {}).get('{{satellite_type}}', 'HY1C')
+        source = replacements.get('text', {}).get('{{source_type}}', 'AQUA')
+
         # 处理未使用的val_results占位符（表一）
         for placeholder in all_placeholders:
             match = val_pattern.match(placeholder)
@@ -3120,7 +3124,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                     # 填写检验类型和"/"
                     var_name = match.group(1)
                     print(f"\n【调试】处理未使用的val_results: {full_placeholder}")
-                    _fill_unused_val_results(doc, var_name)
+                    _fill_unused_val_results(doc, var_name, satellite, source)
 
         # 处理未使用的col_results占位符（表二）
         for placeholder in all_placeholders:
@@ -3137,13 +3141,18 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         print("【调试】未使用占位符处理完成")
         print("="*80 + "\n")
 
-    def _fill_unused_val_results(doc, var_name):
+    def _fill_unused_val_results(doc, var_name, satellite, source):
         """为未使用的val_results占位符填写检验类型和"/" """
         placeholder = f'{{{{val_results_{var_name}}}}}'
 
+        # 使用与其他产品相同的检验类型格式
+        if source.upper() == 'XC':
+            validation_type = f"{satellite} vs 现场"
+        else:
+            validation_type = f"{satellite} vs {source}"
+
         # 填充表格：检验类型 | / | /
-        # 由于是未使用的占位符，我们无法确定具体的检验类型，使用通用值
-        val_results = [['未配置检验', '/', '/']]
+        val_results = [[validation_type, '/', '/']]
         _fill_table(doc, placeholder, val_results)
 
     def _delete_col_results_row(doc, var_name):

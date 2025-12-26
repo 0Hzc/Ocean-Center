@@ -16,6 +16,7 @@ from datetime import datetime
 from collections import defaultdict
 from calendar import monthrange
 import glob
+import subprocess
 
 from docx import Document
 from docx.shared import Inches, Pt
@@ -590,12 +591,102 @@ class ChartGenerator:
                         differences.append(diff)
                 except (ValueError, IndexError):
                     continue
-            
+
             return differences
         except Exception as e:
             if self.debug:
                 print(f"[DEBUG] 解析matchup失败: {e}")
             return []
+
+    def generate_time_series_chart(self, satellite, source, product, report_files, timestamp):
+        """
+        生成时间序列图
+
+        :param satellite: 卫星名称
+        :param source: 数据源
+        :param product: 产品名称
+        :param report_files: report文件列表
+        :param timestamp: 时间戳
+        """
+        if not report_files:
+            if self.debug:
+                print(f"[DEBUG]   {product}: 无数据文件，跳过时序图")
+            return None
+
+        times = []
+        biases = []
+
+        # 从report文件中读取时间和bias数据
+        for report_file in sorted(report_files):
+            try:
+                basename = os.path.basename(report_file)
+                # 从文件名中提取时间：report_HY1C_TERRA_sst_20251009_104500.txt
+                parts = basename.split('_')
+                if len(parts) >= 5:
+                    date_str = parts[-2]  # 20251009
+                    time_str = parts[-1].replace('.txt', '')  # 104500
+
+                    # 读取bias值
+                    bias = None
+                    with open(report_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            line = line.strip()
+                            if line.startswith('/bias='):
+                                bias = float(line.split('=')[1])
+                                break
+
+                    if bias is not None:
+                        # 组合时间字符串
+                        time_point = f"{date_str}_{time_str}"
+                        times.append(pd.to_datetime(time_point, format='%Y%m%d_%H%M%S'))
+                        biases.append(bias)
+            except Exception as e:
+                if self.debug:
+                    print(f"[DEBUG] 解析report文件失败 {report_file}: {e}")
+                continue
+
+        if not times:
+            if self.debug:
+                print(f"[DEBUG]   {product}: 无有效数据，跳过时序图")
+            return None
+
+        # 绘制时序图
+        try:
+            plt.figure(figsize=(12, 6))
+
+            # 根据产品类型设置单位
+            if product.lower() == 'sst':
+                ylabel = 'Bias (K)'
+            else:
+                # 其他产品需要转换为百分比
+                biases = [b * 100 for b in biases]
+                ylabel = 'Bias (%)'
+
+            plt.plot(times, biases, 'b-o', markersize=4, linewidth=1.5, label=f'{satellite} vs {source}')
+
+            plt.title(f'{satellite} vs {source} {product} Time Series')
+            plt.xlabel('Time')
+            plt.ylabel(ylabel)
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+
+            # 保存图片
+            output_filename = f'{satellite}_COCTS_{source}_{product.upper()}_TIMESERIES_{timestamp}.jpg'
+            output_path = os.path.join(self.output_dir, output_filename)
+            plt.savefig(output_path, bbox_inches='tight', dpi=100)
+            plt.close()
+
+            print(f"[INFO]   ✓ 生成时序图: {output_filename}")
+            return output_path
+
+        except Exception as e:
+            print(f"[ERROR] 生成时序图失败: {e}")
+            if self.debug:
+                import traceback
+                traceback.print_exc()
+            return None
 
 
 # ============================================================================
@@ -892,6 +983,10 @@ class TemplateFiller:
         for p in sorted(unused_cols):
             print(f"      {p}")
 
+        # 从replacements中提取卫星和数据源信息
+        satellite = replacements.get('text', {}).get('{{satellite_type}}', 'HY1C')
+        source = replacements.get('text', {}).get('{{source_type}}', 'AQUA')
+
         # 处理未使用的val_results占位符（表一）
         for placeholder in all_placeholders:
             match = val_pattern.match(placeholder)
@@ -901,7 +996,7 @@ class TemplateFiller:
                     # 填写检验类型和"/"
                     var_name = match.group(1)
                     print(f"\n【调试】处理未使用的val_results: {full_placeholder}")
-                    self._fill_unused_val_results(doc, var_name)
+                    self._fill_unused_val_results(doc, var_name, satellite, source)
 
         # 处理未使用的col_results占位符（表二）
         for placeholder in all_placeholders:
@@ -918,17 +1013,15 @@ class TemplateFiller:
         print("【调试】未使用占位符处理完成")
         print("="*80 + "\n")
 
-    def _fill_unused_val_results(self, doc, var_name):
+    def _fill_unused_val_results(self, doc, var_name, satellite, source):
         """为未使用的val_results占位符填写检验类型和"/" """
         placeholder = f'{{{{val_results_{var_name}}}}}'
 
-        # 从VAR_CONFIGS中获取可能的检验类型
-        # 尝试从所有配置中找到这个产品
-        validation_type = "未知检验"
-        for source, config in VAR_CONFIGS.items():
-            if var_name in config:
-                validation_type = f"卫星 vs {source}"
-                break
+        # 使用与其他产品相同的检验类型格式
+        if source.upper() == 'XC':
+            validation_type = f"{satellite} vs 现场"
+        else:
+            validation_type = f"{satellite} vs {source}"
 
         # 填充表格：检验类型 | / | /
         val_results = [[validation_type, '/', '/']]
@@ -1219,6 +1312,66 @@ class TemplateFiller:
 
 
 # ============================================================================
+# PDF转换函数
+# ============================================================================
+
+def word_to_pdf(input_dir, output_dir, specific_files=None):
+    """
+    将指定目录中的 .docx 文件转换为 PDF 文件。
+
+    参数:
+        input_dir (str): 包含 .docx 文件的输入目录。
+        output_dir (str): 保存转换后的 PDF 文件的输出目录。
+        specific_files (list): 可选,指定要转换的docx文件名列表。如果为None,则转换所有docx文件。
+    """
+    # 确保输出目录存在
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # 确定要处理的文件列表
+    if specific_files is not None:
+        # 只处理指定的文件
+        files_to_convert = [f for f in specific_files if f.endswith(".docx")]
+        print(f"\n[INFO] 仅转换本次生成的 {len(files_to_convert)} 个docx文件")
+    else:
+        # 处理目录中所有的docx文件(向后兼容)
+        files_to_convert = [f for f in os.listdir(input_dir) if f.endswith(".docx")]
+        print(f"\n[INFO] 转换目录中所有 {len(files_to_convert)} 个docx文件")
+
+    # 遍历要转换的文件
+    for filename in files_to_convert:
+        # 构建输入文件的完整路径
+        input_file = os.path.join(input_dir, filename)
+
+        # 检查文件是否存在
+        if not os.path.exists(input_file):
+            print(f"[WARNING] 文件不存在,跳过: {input_file}")
+            continue
+
+        # 构建输出文件的完整路径（将 .docx 替换为 .pdf）
+        output_file = os.path.join(output_dir, filename.replace(".docx", ".pdf"))
+
+        # 构建 LibreOffice 命令
+        cmd = [
+            'libreoffice',
+            '--headless',
+            '--convert-to', 'pdf',
+            input_file,
+            '--outdir', output_dir
+        ]
+
+        # 运行命令
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        # 检查转换是否成功
+        if result.returncode == 0:
+            print(f"[INFO] ✓ 成功转换：{filename} -> {filename.replace('.docx', '.pdf')}")
+        else:
+            print(f"[ERROR] 转换失败：{filename}")
+            print(f"[ERROR] 错误信息：{result.stderr.decode()}")
+
+
+# ============================================================================
 # 主生成器
 # ============================================================================
 
@@ -1305,7 +1458,7 @@ class MonthlyReportGenerator:
         if self.report_type == 'month':
             return f"{self.year}{self.month:02d}"
         elif self.report_type == 'quarter':
-            return f"{self.year}Q{self.quarter}"
+            return f"{self.year}S{self.quarter}"
         else:
             return f"{self.year}"
     
@@ -1391,7 +1544,10 @@ class MonthlyReportGenerator:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             suffix = self._get_report_suffix()
             period_str = self._get_report_title().replace('汇总报告', '')
-            
+
+            # 跟踪生成的docx文件列表，用于PDF转换
+            generated_docx_files = []
+
             for val_label, val_data in aggregated.items():
                 print(f"\n[INFO] 生成报告: {val_label}")
                 
@@ -1434,7 +1590,25 @@ class MonthlyReportGenerator:
                     self.chart_generator.generate_geo_map(
                         satellite, source, product, val_data['dates'], timestamp
                     )
-                
+
+                    # 生成时序图 - 收集report文件
+                    report_files = []
+                    for date_str in val_data['dates']:
+                        patterns = [
+                            f'report_{satellite}_{source}_{product}_{date_str}_*.txt',
+                            f'{satellite}_COCTS_{source}_{product}_report_{date_str}_*.txt'
+                        ]
+                        for pattern in patterns:
+                            full_pattern = os.path.join(self.daily_reports_dir, pattern)
+                            found = glob.glob(full_pattern)
+                            report_files.extend(found)
+
+                    report_files = list(set(report_files))
+                    if report_files:
+                        self.chart_generator.generate_time_series_chart(
+                            satellite, source, product, report_files, timestamp
+                        )
+
                 # 填充模板
                 template_path = self.template_filler.get_template_path(source)
                 if not template_path or not os.path.exists(template_path):
@@ -1448,11 +1622,21 @@ class MonthlyReportGenerator:
                 # 问题8: 调整文件名格式，使用大写以匹配日报格式
                 output_docx = os.path.join(
                     self.summary_dir,
-                    f'{satellite.upper()}_COCTS_{source.upper()}_summary_{suffix}.docx'
+                    f'{satellite.upper()}_COCTS_{source.upper()}_val_report_{suffix}.docx'
                 )
-                
+
                 self.template_filler.fill_template(template_path, output_docx, replacements)
-            
+
+                # 记录生成的docx文件
+                generated_docx_files.append(os.path.basename(output_docx))
+
+            # 4. 转换为PDF
+            if generated_docx_files:
+                print(f"\n[INFO] {'─'*80}")
+                print(f"[INFO] 步骤4: 转换为PDF")
+                print(f"[INFO] {'─'*80}")
+                word_to_pdf(self.summary_dir, self.summary_dir, generated_docx_files)
+
             print(f"\n[INFO] {'='*80}")
             print(f"[INFO] ✓ 完成")
             print(f"[INFO] {'='*80}")
