@@ -1087,15 +1087,21 @@ class TemplateFiller:
             print(f"  有内容: {has_content}, 有图片: {has_image}, 有占位符: {has_placeholder}")
             print(f"  内容详情: {content_details if content_details else '无'}")
 
-            # 如果小节为空，标记删除该范围的所有段落
+            # 如果小节为空，收集该小节的段落（不包括下一小节/章节的标题）
             if not has_content:
                 empty_subsections.append((chapter, subsection, title))
                 print(f"  >>> 标记为删除")
 
-                # 收集要删除的段落对象（包括小节标题）
+                # 收集要删除的段落对象（只收集当前小节的内容）
+                chapter_title_pattern_local = re.compile(r'^\d+\s+[^\d]')
                 for para_idx in range(start_idx, end_idx):
                     if para_idx < len(doc.paragraphs):
                         para_obj = doc.paragraphs[para_idx]
+                        # 跳过章节标题（会在第四步单独处理）
+                        para_text = para_obj.text.strip()
+                        if para_idx > start_idx and chapter_title_pattern_local.match(para_text):
+                            # 这是下一个章节的标题，不应包含在当前小节的删除范围内
+                            break
                         if para_obj not in paragraphs_to_delete_objs:
                             paragraphs_to_delete_objs.append(para_obj)
 
