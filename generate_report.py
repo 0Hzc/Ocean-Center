@@ -65,6 +65,67 @@ VAR_CONFIGS = {
         'Rrs670': {'sources': ['TERRA'], 'unit': 'sr⁻¹'},
         'AOT': {'sources': ['TERRA'], 'unit': ''},
     },
+    'SNPP': {
+        'sst': {'sources': ['SNPP'], 'unit': 'K'},
+        'chl': {'sources': ['SNPP'], 'unit': 'mg/m³'},
+        'Rrs412': {'sources': ['SNPP'], 'unit': 'sr⁻¹'},
+        'Rrs443': {'sources': ['SNPP'], 'unit': 'sr⁻¹'},
+        'Rrs490': {'sources': ['SNPP'], 'unit': 'sr⁻¹'},
+        'Rrs565': {'sources': ['SNPP'], 'unit': 'sr⁻¹'},
+        'Rrs670': {'sources': ['SNPP'], 'unit': 'sr⁻¹'},
+        'AOT': {'sources': ['SNPP'], 'unit': ''},
+    },
+    'JPSS': {
+        'sst': {'sources': ['JPSS'], 'unit': 'K'},
+        'chl': {'sources': ['JPSS'], 'unit': 'mg/m³'},
+        'Rrs412': {'sources': ['JPSS'], 'unit': 'sr⁻¹'},
+        'Rrs443': {'sources': ['JPSS'], 'unit': 'sr⁻¹'},
+        'Rrs490': {'sources': ['JPSS'], 'unit': 'sr⁻¹'},
+        'Rrs565': {'sources': ['JPSS'], 'unit': 'sr⁻¹'},
+        'Rrs670': {'sources': ['JPSS'], 'unit': 'sr⁻¹'},
+        'AOT': {'sources': ['JPSS'], 'unit': ''},
+    },
+    'HY1C': {
+        'sst': {'sources': ['HY1C'], 'unit': 'K'},
+        'chl': {'sources': ['HY1C'], 'unit': 'mg/m³'},
+        'Rrs412': {'sources': ['HY1C'], 'unit': 'sr⁻¹'},
+        'Rrs443': {'sources': ['HY1C'], 'unit': 'sr⁻¹'},
+        'Rrs490': {'sources': ['HY1C'], 'unit': 'sr⁻¹'},
+        'Rrs520': {'sources': ['HY1C'], 'unit': 'sr⁻¹'},
+        'Rrs565': {'sources': ['HY1C'], 'unit': 'sr⁻¹'},
+        'Rrs670': {'sources': ['HY1C'], 'unit': 'sr⁻¹'},
+        'AOT': {'sources': ['HY1C'], 'unit': ''},
+        'TSM': {'sources': ['HY1C'], 'unit': 'mg/L'},
+        'CDOM': {'sources': ['HY1C'], 'unit': '1/m'},
+    },
+    'HY1D': {
+        'sst': {'sources': ['HY1D'], 'unit': 'K'},
+        'chl': {'sources': ['HY1D'], 'unit': 'mg/m³'},
+        'Rrs412': {'sources': ['HY1D'], 'unit': 'sr⁻¹'},
+        'Rrs443': {'sources': ['HY1D'], 'unit': 'sr⁻¹'},
+        'Rrs490': {'sources': ['HY1D'], 'unit': 'sr⁻¹'},
+        'Rrs520': {'sources': ['HY1D'], 'unit': 'sr⁻¹'},
+        'Rrs565': {'sources': ['HY1D'], 'unit': 'sr⁻¹'},
+        'Rrs670': {'sources': ['HY1D'], 'unit': 'sr⁻¹'},
+        'AOT': {'sources': ['HY1D'], 'unit': ''},
+        'TSM': {'sources': ['HY1D'], 'unit': 'mg/L'},
+        'CDOM': {'sources': ['HY1D'], 'unit': '1/m'},
+    },
+    'HY1E': {
+        'sst': {'sources': ['HY1E'], 'unit': 'K'},
+        'chl': {'sources': ['HY1E'], 'unit': 'mg/m³'},
+        'Rrs412': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
+        'Rrs443': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
+        'Rrs490': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
+        'Rrs520': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
+        'Rrs565': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
+        'Rrs670': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
+        'Rrs750': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
+        'AOT': {'sources': ['HY1E'], 'unit': ''},
+        'TSM': {'sources': ['HY1E'], 'unit': 'mg/L'},
+        'CDOM': {'sources': ['HY1E'], 'unit': '1/m'},
+        'IPAR': {'sources': ['HY1E'], 'unit': 'Einstein/m²/d'},
+    },
     'XC': {
         'sst': {'sources': ['XC'], 'unit': 'K'},
         'chl': {'sources': ['XC'], 'unit': 'mg/m³'},
@@ -81,7 +142,11 @@ PRODUCT_NAMES = {
     'Rrs490': '490nm遥感反射率',
     'Rrs520': '520nm遥感反射率',
     'Rrs565': '565nm遥感反射率',
-    'Rrs670': '670nm遥感反射率'
+    'Rrs670': '670nm遥感反射率',
+    'Rrs750': '750nm遥感反射率',
+    'TSM': '总悬浮物浓度',
+    'CDOM': '有色溶解有机物吸收系数',
+    'IPAR': '光合有效辐射'
 }
 
 
@@ -703,6 +768,8 @@ class TemplateFiller:
             return os.path.join(self.template_dir, 'new_auqa_terra_template.docx')
         elif source.upper() in ['SNPP', 'JPSS']:
             return os.path.join(self.template_dir, 'new_snpp_jpss_template.docx')
+        elif source.upper() in ['HY1C', 'HY1D', 'HY1E']:
+            return os.path.join(self.template_dir, 'satelite_template.docx')
         elif source.upper() == 'XC':
             return os.path.join(self.template_dir, 'new_xc_template.docx')
         else:
