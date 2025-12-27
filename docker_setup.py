@@ -4046,7 +4046,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
     # 定义产品配置
     # 定义AQUA_VAR_CONFIG
     AQUA_VAR_CONFIG = {
-        'sst': {'sources': ['AQUA'], 'unit': '℃', 'col_values': [25, 1800]},
+        'sst': {'sources': ['AQUA'], 'unit': 'K', 'col_values': [25, 1800]},
         'chl': {'sources': ['AQUA'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
         'Rrs412': {'sources': ['AQUA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'Rrs443': {'sources': ['AQUA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
@@ -4059,7 +4059,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
     # 定义TERRA_VAR_CONFIG
     TERRA_VAR_CONFIG = {
-        # 'sst': {'sources': ['TERRA'], 'unit': '℃', 'col_values': [25, 1800]},
+        # 'sst': {'sources': ['TERRA'], 'unit': 'K', 'col_values': [25, 1800]},
         'chl': {'sources': ['TERRA'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
         'Rrs412': {'sources': ['TERRA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'Rrs443': {'sources': ['TERRA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
@@ -4076,7 +4076,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
     # 定义SNPP_VAR_CONFIG
     SNPP_VAR_CONFIG = {
-        'sst': {'sources': ['SNPP'], 'unit': '℃', 'col_values': [25, 1800]},
+        'sst': {'sources': ['SNPP'], 'unit': 'K', 'col_values': [25, 1800]},
         'chl': {'sources': ['SNPP'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
         'Rrs412': {'sources': ['SNPP'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'Rrs443': {'sources': ['SNPP'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
@@ -4088,7 +4088,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
     # 定义JPSS_VAR_CONFIG
     JPSS_VAR_CONFIG = {
-        'sst': {'sources': ['JPSS'], 'unit': '℃', 'col_values': [25, 1800]},
+        'sst': {'sources': ['JPSS'], 'unit': 'K', 'col_values': [25, 1800]},
         'chl': {'sources': ['JPSS'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
         'Rrs412': {'sources': ['JPSS'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'Rrs443': {'sources': ['JPSS'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
@@ -4177,10 +4177,19 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                 for source in config['sources']
             }
 
-            val_results = [
-                [f'{satellite_type} vs {source}', f"{metrics[source]['bias']:.2f}", f"{metrics[source]['rms']:.2f}"]
-                for source in config['sources']
-            ]
+            # 根据产品类型设置单位
+            unit = config['unit']
+            val_results = []
+            for source in config['sources']:
+                if var_name == 'sst':
+                    # 海温：bias 和 rms 都用 K（绝对误差）
+                    bias_str = f"{metrics[source]['bias']:.4f}{unit}"
+                    rms_str = f"{metrics[source]['rms']:.4f}{unit}"
+                else:
+                    # 其他产品：bias 用 %（相对误差，需要乘100），rms 用原单位
+                    bias_str = f"{metrics[source]['bias']*100:.2f}%"
+                    rms_str = f"{metrics[source]['rms']:.4f}{unit}"
+                val_results.append([f'{satellite_type} vs {source}', bias_str, rms_str])
 
             col_results = [
                 [f'{satellite_type} vs {source}', f"{space_size}*{space_size}", f"{time_size}", f"{metrics[source]['n']}"]
