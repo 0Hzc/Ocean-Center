@@ -1468,8 +1468,8 @@ class MonthlyReportGenerator:
             self.output_base = self.config.get('PATH', 'output_dir', fallback='output')
         
         self.output_base = self.output_base.replace('\\', '/')
-        
-        self.summary_dir = os.path.join(self.output_base, '06_summary_reports', f'{report_type}ly')
+
+        self.summary_dir = os.path.join(self.output_base, '05_reports')
         self.daily_reports_dir = os.path.join(self.output_base, '05_reports')
         self.collocation_dir = os.path.join(self.output_base, '03_collocation')
         self.image_dir = os.path.join(self.output_base, '04_visualization')
