@@ -4530,12 +4530,20 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                     # 检查是否只是占位符
                     if '{{' in text and '}}' in text:
                         has_placeholder = True
+                        content_details.append(f"占位符: {text[:40]}...")
                         continue
 
-                    # 有实际内容
-                    has_content = True
-                    content_details.append(f"内容: {text[:40]}...")
-                    break
+                    # 检查是否只是图片标题（以"图"开头，包含关键词）
+                    if text.startswith('图') and any(word in text for word in ['HY1E', 'vs', '检验', '分布', 'TERRA', 'AQUA', '时序']):
+                        # 这是图片标题，但没有实际图片，不算实质内容
+                        content_details.append(f"图片标题(无图): {text[:40]}...")
+                        continue  # 跳过图片标题，继续检查下一段
+
+                    # 其他有实质内容的文本
+                    if len(text) > 5:
+                        has_content = True
+                        content_details.append(f"内容: {text[:40]}...")
+                        break
 
             # 输出每个小节的检查结果（用于调试）
             print(f"\n【调试】小节 {chapter}.{subsection}:")
