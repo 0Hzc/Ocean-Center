@@ -2065,22 +2065,43 @@ def step7(input_dir, output_dir):
             with open(file_path, 'r') as f:
                 data = []
                 line_count = 0
+                skipped_inf = 0
                 for line in f:
                     try:
                         values = line.strip().split()
                         if len(values) >= 4:
-                            row_index = int(float(values[0]))
-                            col_index = int(float(values[1]))
+                            # 先转换为float检查是否为infinity
+                            row_float = float(values[0])
+                            col_float = float(values[1])
                             error = float(values[3])  # 使用第4列
+
+                            # 跳过包含infinity的行
+                            if np.isinf(row_float) or np.isinf(col_float) or np.isinf(error):
+                                skipped_inf += 1
+                                continue
+
+                            row_index = int(row_float)
+                            col_index = int(col_float)
                             data.append([row_index, col_index, error])
                         line_count += 1
                     except ValueError as e:
                         continue
                 print(f"valresult文件总行数: {line_count}")
                 print(f"成功解析的数据行数: {len(data)}")
+                if skipped_inf > 0:
+                    print(f"跳过的infinity值行数: {skipped_inf}")
                 if data:
                     print(f"数据样例（前3行）: {data[:3]}")
-                return data, "valresult" if data else (None, None)
+                    return data, "valresult"
+                else:
+                    print(f"⚠️ 【GEO图像调试】valresult文件无有效数据!")
+                    print(f"   - 文件路径: {file_path}")
+                    print(f"   - 总行数: {line_count}, 跳过infinity行数: {skipped_inf}")
+                    if skipped_inf > 0 and skipped_inf == line_count:
+                        print(f"   - 原因: 所有数据行都包含infinity值，无法生成GEO图像")
+                    elif line_count == 0:
+                        print(f"   - 原因: 文件为空或无有效数据行")
+                    return None, None
         except Exception as e:
             print(f"读取文件失败: {e}")
             return None, None
@@ -2190,9 +2211,15 @@ def step7(input_dir, output_dir):
         print(f"匹配结果统计:")
         print(f"- 成功匹配的点数: {len(matched_data)}")
         print(f"- 匹配失败的点数: {len(spaceresult) - len(matched_data)}")
-        # if matched_data:
-        #     print(f"- 匹配数据样例（前3个）: {matched_data[:3]}")
-        
+
+        if not matched_data:
+            print(f"⚠️ 【GEO图像调试】坐标匹配后无有效数据点:")
+            print(f"   - 输入数据点数: {len(spaceresult)}")
+            print(f"   - 跳过的无效数据点(infinity/索引超出等): {error_count}")
+            print(f"   - lat数据形状: {lat.shape}, lon数据形状: {lon.shape}")
+            if error_count == len(spaceresult):
+                print(f"   - 原因: 所有数据点都包含无效值或索引超出范围")
+
         return matched_data
 
     def write_output(matched_data, output_file):
@@ -2388,20 +2415,30 @@ def step7(input_dir, output_dir):
         lon_file = find_file_with_prefix(input_dir, 'HY1E_lon')
         
         if not all([valresult_data, lat_file, lon_file]):
-            print("缺少必要的输入文件或数据读取失败")
+            print(f"⚠️ 【GEO图像调试】无法为 {os.path.basename(valresult_file)} 生成GEO图像:")
+            if not valresult_data:
+                print(f"   - valresult数据为空或读取失败")
+            if not lat_file:
+                print(f"   - 未找到lat文件 (HY1E_lat*.txt)")
+            if not lon_file:
+                print(f"   - 未找到lon文件 (HY1E_lon*.txt)")
             continue
         
         lat = read_lat(lat_file)
         lon = read_lon(lon_file)
         
         if not all([lat is not None, lon is not None]):
-            print("lat或lon数据读取失败")
+            print(f"⚠️ 【GEO图像调试】lat或lon数据读取失败，无法生成GEO图像:")
+            if lat is None:
+                print(f"   - lat数据读取失败: {lat_file}")
+            if lon is None:
+                print(f"   - lon数据读取失败: {lon_file}")
             continue
         
         # 匹配坐标
         matched_data = match_coordinates(valresult_data, lat, lon, os.path.basename(valresult_file))
         if not matched_data:
-            print("没有有效的匹配数据")
+            print(f"⚠️ 【GEO图像调试】{os.path.basename(valresult_file)} 坐标匹配后无有效数据，无法生成GEO图像")
             continue
         
         # 生成输出文件名
@@ -2415,9 +2452,9 @@ def step7(input_dir, output_dir):
         # 生成误差地图
         final_output_file = process_error_map(temp_output_file, output_dir)
         if final_output_file:
-            print(f"处理完成，输出文件：{final_output_file}")
+            print(f"✅ GEO图像生成成功: {final_output_file}")
         else:
-            print("生成误差地图失败")
+            print(f"⚠️ 【GEO图像调试】生成误差地图失败: {os.path.basename(valresult_file)}")
 
 
 
@@ -4345,7 +4382,17 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
     def _insert_image(doc, placeholder, image_path):
         """在占位符位置插入图片"""
         if not os.path.exists(image_path):
-            print(f"警告：图片文件不存在: {image_path}")
+            print(f"⚠️ 【图像调试】图片文件不存在: {image_path}")
+            # 分析可能的原因
+            img_name = os.path.basename(image_path)
+            if '_GEO_' in img_name:
+                print(f"   - 这是GEO图像，可能原因:")
+                print(f"     1. valresult文件中的数据全部为infinity或无效值")
+                print(f"     2. 缺少对应的lat/lon坐标文件")
+                print(f"     3. 坐标匹配过程中所有数据点都被过滤掉")
+                print(f"   - 请检查上方的【GEO图像调试】信息获取详细原因")
+            elif '_PIE_' in img_name:
+                print(f"   - 这是PIE统计图，请检查valstastic文件生成是否成功")
             return
         found = False
         # 遍历所有段落
@@ -4456,12 +4503,19 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                     check_para = doc.paragraphs[para_idx]
                     text = check_para.text.strip()
 
-                    # 检查段落中是否有图片
+                    # 先检查是否包含图片（即使文本为空也要检查，因为插入图片后文本会被清空）
                     for run in check_para.runs:
-                        if run._element.xpath('.//a:blip', namespaces={'a': 'http://schemas.openxmlformats.org/drawingml/2006/main'}):
-                            has_image = True
-                            has_content = True
-                            break
+                        if hasattr(run, '_element'):
+                            drawings = run._element.findall('./{http://schemas.openxmlformats.org/wordprocessingml/2006/main}drawing')
+                            if drawings:
+                                has_image = True
+                                content_details.append(f"图片")
+                                break
+
+                    # 如果有图片，则认为有内容
+                    if has_image:
+                        has_content = True
+                        break
 
                     # 跳过空白、小节标题和章节标题
                     if not text or subsection_pattern.match(text):
@@ -4470,6 +4524,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                     # 跳过章节标题
                     chapter_title_pattern = re.compile(r'^\d+\s+[^\d]')
                     if chapter_title_pattern.match(text):
+                        content_details.append(f"章节标题: {text[:40]}...")
                         continue
 
                     # 检查是否只是占位符
@@ -4479,7 +4534,14 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
                     # 有实际内容
                     has_content = True
+                    content_details.append(f"内容: {text[:40]}...")
                     break
+
+            # 输出每个小节的检查结果（用于调试）
+            print(f"\n【调试】小节 {chapter}.{subsection}:")
+            print(f"  标题: {title[:60]}...")
+            print(f"  有内容: {has_content}, 有图片: {has_image}, 有占位符: {has_placeholder}")
+            print(f"  内容详情: {content_details if content_details else '无'}")
 
             # 如果小节为空，收集该小节的段落
             if not has_content:
