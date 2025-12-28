@@ -2405,7 +2405,43 @@ def step7(input_dir, output_dir):
 
     # 处理所有valresult文件
     valresult_files = glob.glob(os.path.join(input_dir, 'valresult*.txt'))
-    
+
+    # 【GEO图像调试】打印找到的所有valresult文件及产品分类
+    print(f"\n{'='*60}")
+    print(f"【GEO图像调试】Step7 开始处理")
+    print(f"{'='*60}")
+    print(f"输入目录: {input_dir}")
+    print(f"输出目录: {output_dir}")
+    print(f"找到的valresult文件数量: {len(valresult_files)}")
+
+    # 按产品类型分类
+    product_files = {'SST': [], 'IPAR': [], 'Rrs': [], '其他': []}
+    for f in valresult_files:
+        fname = os.path.basename(f).upper()
+        if 'SST' in fname:
+            product_files['SST'].append(f)
+        elif 'IPAR' in fname:
+            product_files['IPAR'].append(f)
+        elif 'RRS' in fname or 'RS' in fname:
+            product_files['Rrs'].append(f)
+        else:
+            product_files['其他'].append(f)
+
+    for product, files in product_files.items():
+        if files:
+            print(f"\n{product}产品 ({len(files)}个文件):")
+            for f in files:
+                print(f"  - {os.path.basename(f)}")
+        else:
+            print(f"\n{product}产品: 无文件")
+
+    print(f"\n{'='*60}")
+    print(f"开始逐个处理valresult文件...")
+    print(f"{'='*60}\n")
+
+    # 记录处理结果
+    process_results = {'成功': [], '失败': []}
+
     for valresult_file in valresult_files:
         print(f"正在处理文件: {valresult_file}")
         
@@ -2422,6 +2458,7 @@ def step7(input_dir, output_dir):
                 print(f"   - 未找到lat文件 (HY1E_lat*.txt)")
             if not lon_file:
                 print(f"   - 未找到lon文件 (HY1E_lon*.txt)")
+            process_results['失败'].append(os.path.basename(valresult_file))
             continue
         
         lat = read_lat(lat_file)
@@ -2433,12 +2470,14 @@ def step7(input_dir, output_dir):
                 print(f"   - lat数据读取失败: {lat_file}")
             if lon is None:
                 print(f"   - lon数据读取失败: {lon_file}")
+            process_results['失败'].append(os.path.basename(valresult_file))
             continue
         
         # 匹配坐标
         matched_data = match_coordinates(valresult_data, lat, lon, os.path.basename(valresult_file))
         if not matched_data:
             print(f"⚠️ 【GEO图像调试】{os.path.basename(valresult_file)} 坐标匹配后无有效数据，无法生成GEO图像")
+            process_results['失败'].append(os.path.basename(valresult_file))
             continue
         
         # 生成输出文件名
@@ -2453,9 +2492,40 @@ def step7(input_dir, output_dir):
         final_output_file = process_error_map(temp_output_file, output_dir)
         if final_output_file:
             print(f"✅ GEO图像生成成功: {final_output_file}")
+            process_results['成功'].append(os.path.basename(valresult_file))
         else:
             print(f"⚠️ 【GEO图像调试】生成误差地图失败: {os.path.basename(valresult_file)}")
+            process_results['失败'].append(os.path.basename(valresult_file))
 
+    # 【GEO图像调试】打印处理结果汇总
+    print(f"\n{'='*60}")
+    print(f"【GEO图像调试】Step7 处理完成 - 结果汇总")
+    print(f"{'='*60}")
+    print(f"成功生成GEO图像: {len(process_results['成功'])}个")
+    for f in process_results['成功']:
+        print(f"  ✅ {f}")
+    print(f"\n未能生成GEO图像: {len(process_results['失败'])}个")
+    for f in process_results['失败']:
+        print(f"  ❌ {f}")
+
+    # 检查SST和IPAR的处理结果
+    sst_success = [f for f in process_results['成功'] if 'SST' in f.upper()]
+    sst_fail = [f for f in process_results['失败'] if 'SST' in f.upper()]
+    ipar_success = [f for f in process_results['成功'] if 'IPAR' in f.upper()]
+    ipar_fail = [f for f in process_results['失败'] if 'IPAR' in f.upper()]
+
+    print(f"\n【SST产品】成功: {len(sst_success)}, 失败: {len(sst_fail)}")
+    print(f"【IPAR产品】成功: {len(ipar_success)}, 失败: {len(ipar_fail)}")
+
+    # 检查是否有SST/IPAR文件但没有生成图像
+    sst_files = [f for f in valresult_files if 'SST' in os.path.basename(f).upper()]
+    ipar_files = [f for f in valresult_files if 'IPAR' in os.path.basename(f).upper()]
+    if not sst_files:
+        print(f"\n⚠️ 【GEO图像调试】警告: 未找到任何SST产品的valresult文件!")
+    if not ipar_files:
+        print(f"⚠️ 【GEO图像调试】警告: 未找到任何IPAR产品的valresult文件!")
+
+    print(f"{'='*60}\n")
 
 
 def step8(input_directory, output_directory):
@@ -4255,14 +4325,24 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
             unit = config['unit']
             val_results = []
             for source in config['sources']:
-                if var_name == 'sst':
-                    # 海温：bias 和 rms 都用 K（绝对误差）
-                    bias_str = f"{metrics[source]['bias']:.4f}{unit}"
-                    rms_str = f"{metrics[source]['rms']:.4f}{unit}"
+                bias_val = metrics[source]['bias']
+                rms_val = metrics[source]['rms']
+
+                # 检查nan和inf，替换为"/"
+                if bias_val is None or np.isnan(bias_val) or np.isinf(bias_val):
+                    bias_str = '/'
+                elif var_name == 'sst':
+                    bias_str = f"{bias_val:.4f}{unit}"
                 else:
-                    # 其他产品：bias 用 %（相对误差，需要乘100），rms 用原单位
-                    bias_str = f"{metrics[source]['bias']*100:.2f}%"
-                    rms_str = f"{metrics[source]['rms']:.4f}{unit}"
+                    bias_str = f"{bias_val*100:.2f}%"
+
+                if rms_val is None or np.isnan(rms_val) or np.isinf(rms_val):
+                    rms_str = '/'
+                elif var_name == 'sst':
+                    rms_str = f"{rms_val:.4f}{unit}"
+                else:
+                    rms_str = f"{rms_val:.4f}{unit}"
+
                 val_results.append([f'{satellite_type} vs {source}', bias_str, rms_str])
 
             col_results = [
