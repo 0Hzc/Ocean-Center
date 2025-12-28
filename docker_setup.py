@@ -2092,7 +2092,16 @@ def step7(input_dir, output_dir):
                     print(f"跳过的infinity值行数: {skipped_inf}")
                 if data:
                     print(f"数据样例（前3行）: {data[:3]}")
-                return data, "valresult" if data else (None, None)
+                    return data, "valresult"
+                else:
+                    print(f"⚠️ 【GEO图像调试】valresult文件无有效数据!")
+                    print(f"   - 文件路径: {file_path}")
+                    print(f"   - 总行数: {line_count}, 跳过infinity行数: {skipped_inf}")
+                    if skipped_inf > 0 and skipped_inf == line_count:
+                        print(f"   - 原因: 所有数据行都包含infinity值，无法生成GEO图像")
+                    elif line_count == 0:
+                        print(f"   - 原因: 文件为空或无有效数据行")
+                    return None, None
         except Exception as e:
             print(f"读取文件失败: {e}")
             return None, None
@@ -2202,9 +2211,15 @@ def step7(input_dir, output_dir):
         print(f"匹配结果统计:")
         print(f"- 成功匹配的点数: {len(matched_data)}")
         print(f"- 匹配失败的点数: {len(spaceresult) - len(matched_data)}")
-        # if matched_data:
-        #     print(f"- 匹配数据样例（前3个）: {matched_data[:3]}")
-        
+
+        if not matched_data:
+            print(f"⚠️ 【GEO图像调试】坐标匹配后无有效数据点:")
+            print(f"   - 输入数据点数: {len(spaceresult)}")
+            print(f"   - 跳过的无效数据点(infinity/索引超出等): {error_count}")
+            print(f"   - lat数据形状: {lat.shape}, lon数据形状: {lon.shape}")
+            if error_count == len(spaceresult):
+                print(f"   - 原因: 所有数据点都包含无效值或索引超出范围")
+
         return matched_data
 
     def write_output(matched_data, output_file):
@@ -2400,20 +2415,30 @@ def step7(input_dir, output_dir):
         lon_file = find_file_with_prefix(input_dir, 'HY1E_lon')
         
         if not all([valresult_data, lat_file, lon_file]):
-            print("缺少必要的输入文件或数据读取失败")
+            print(f"⚠️ 【GEO图像调试】无法为 {os.path.basename(valresult_file)} 生成GEO图像:")
+            if not valresult_data:
+                print(f"   - valresult数据为空或读取失败")
+            if not lat_file:
+                print(f"   - 未找到lat文件 (HY1E_lat*.txt)")
+            if not lon_file:
+                print(f"   - 未找到lon文件 (HY1E_lon*.txt)")
             continue
         
         lat = read_lat(lat_file)
         lon = read_lon(lon_file)
         
         if not all([lat is not None, lon is not None]):
-            print("lat或lon数据读取失败")
+            print(f"⚠️ 【GEO图像调试】lat或lon数据读取失败，无法生成GEO图像:")
+            if lat is None:
+                print(f"   - lat数据读取失败: {lat_file}")
+            if lon is None:
+                print(f"   - lon数据读取失败: {lon_file}")
             continue
         
         # 匹配坐标
         matched_data = match_coordinates(valresult_data, lat, lon, os.path.basename(valresult_file))
         if not matched_data:
-            print("没有有效的匹配数据")
+            print(f"⚠️ 【GEO图像调试】{os.path.basename(valresult_file)} 坐标匹配后无有效数据，无法生成GEO图像")
             continue
         
         # 生成输出文件名
@@ -2427,9 +2452,9 @@ def step7(input_dir, output_dir):
         # 生成误差地图
         final_output_file = process_error_map(temp_output_file, output_dir)
         if final_output_file:
-            print(f"处理完成，输出文件：{final_output_file}")
+            print(f"✅ GEO图像生成成功: {final_output_file}")
         else:
-            print("生成误差地图失败")
+            print(f"⚠️ 【GEO图像调试】生成误差地图失败: {os.path.basename(valresult_file)}")
 
 
 
@@ -4357,7 +4382,17 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
     def _insert_image(doc, placeholder, image_path):
         """在占位符位置插入图片"""
         if not os.path.exists(image_path):
-            print(f"警告：图片文件不存在: {image_path}")
+            print(f"⚠️ 【图像调试】图片文件不存在: {image_path}")
+            # 分析可能的原因
+            img_name = os.path.basename(image_path)
+            if '_GEO_' in img_name:
+                print(f"   - 这是GEO图像，可能原因:")
+                print(f"     1. valresult文件中的数据全部为infinity或无效值")
+                print(f"     2. 缺少对应的lat/lon坐标文件")
+                print(f"     3. 坐标匹配过程中所有数据点都被过滤掉")
+                print(f"   - 请检查上方的【GEO图像调试】信息获取详细原因")
+            elif '_PIE_' in img_name:
+                print(f"   - 这是PIE统计图，请检查valstastic文件生成是否成功")
             return
         found = False
         # 遍历所有段落
