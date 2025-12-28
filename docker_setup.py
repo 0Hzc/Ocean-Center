@@ -4378,7 +4378,11 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
     def _fill_val_results_with_slash(doc, var_name, satellite_type, source_type):
         """为未使用的val_results占位符填充'/'"""
         placeholder = f'{{{{val_results_{var_name}}}}}'
-        validation_type = f'{satellite_type} vs {source_type}'
+        # 处理XC（现场）的特殊情况
+        if source_type.upper() == 'XC':
+            validation_type = f'{satellite_type} vs 现场'
+        else:
+            validation_type = f'{satellite_type} vs {source_type}'
         val_results = [[validation_type, '/', '/']]
         _fill_table(doc, placeholder, val_results)
 
@@ -4585,11 +4589,12 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         print("="*80 + "\n")
 
 
-    def _cleanup_placeholders(doc, replacements, satellite_type, source_type):
+    def _handle_unused_placeholders(doc, replacements, satellite_type, source_type):
         """
         处理模板中存在但未使用的占位符
         - 表一（val_results）：填写检验类型和"/"
         - 表二（col_results）：删除整行
+        - 第三章图片占位符：由_remove_empty_subsections_and_renumber处理
         """
         import re
 
@@ -4598,6 +4603,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         print("="*80)
 
         used_tables = set(replacements.get('tables', {}).keys()) if replacements else set()
+        used_images = set(replacements.get('images', {}).keys()) if replacements else set()
 
         # 收集文档中所有的占位符
         all_placeholders = set()
@@ -4617,7 +4623,16 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                     for m in matches:
                         all_placeholders.add(m)
 
-        print(f"【调试】发现 {len(all_placeholders)} 个占位符")
+        print(f"【调试】模板中发现的所有占位符总数: {len(all_placeholders)}")
+
+        # 按类型分类占位符
+        image_placeholders = [p for p in all_placeholders if any(x in p for x in ['_sct', '_geo', '_map', '_chart'])]
+        val_placeholders = [p for p in all_placeholders if p.startswith('val_results_')]
+        col_placeholders = [p for p in all_placeholders if p.startswith('col_results_')]
+
+        print(f"  - 图片占位符: {len(image_placeholders)}")
+        print(f"  - 表一占位符 (val_results): {len(val_placeholders)}")
+        print(f"  - 表二占位符 (col_results): {len(col_placeholders)}")
 
         # 处理未使用的表格占位符
         val_pattern = re.compile(r'^val_results_(\w+)$')
@@ -4642,30 +4657,42 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                     print(f"【调试】删除未使用的col_results行: {full_placeholder}")
                     _delete_col_results_row(doc, var_name)
 
-        # 清理文本中剩余的占位符
-        for p in doc.paragraphs:
-            if '{{' in p.text and '}}' in p.text:
-                cleaned_text = re.sub(r'\{\{[^}]+\}\}', '', p.text)
-                if p.runs:
-                    p.runs[0].text = cleaned_text
-                    for run in p.runs[1:]:
-                        run.text = ''
-
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    if '{{' in cell.text and '}}' in cell.text:
-                        for p in cell.paragraphs:
-                            if '{{' in p.text:
-                                cleaned_text = re.sub(r'\{\{[^}]+\}\}', '', p.text)
-                                if p.runs:
-                                    p.runs[0].text = cleaned_text
-                                    for run in p.runs[1:]:
-                                        run.text = ''
-
         print("\n" + "="*80)
         print("【调试】未使用占位符处理完成")
         print("="*80 + "\n")
+
+    def _cleanup_placeholders(doc):
+        """清理所有未替换的占位符（移除大括号形式的参数名称）"""
+        import re
+        placeholder_pattern = re.compile(r'\{\{[^}]+\}\}')
+
+        # 清理段落中的占位符
+        for p in doc.paragraphs:
+            # 检查段落的整体文本（处理占位符跨多个run的情况）
+            if placeholder_pattern.search(p.text):
+                cleaned_text = placeholder_pattern.sub('', p.text)
+                # 清空所有run并设置新文本
+                for run in p.runs:
+                    run.text = ''
+                if cleaned_text.strip():  # 如果清理后还有文本
+                    if p.runs:
+                        p.runs[0].text = cleaned_text
+                elif p.runs:  # 如果清理后没有文本，保持空段落
+                    p.runs[0].text = cleaned_text
+
+        # 清理表格中的占位符
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        # 检查段落的整体文本
+                        if placeholder_pattern.search(p.text):
+                            cleaned_text = placeholder_pattern.sub('', p.text)
+                            # 清空所有run并设置新文本
+                            for run in p.runs:
+                                run.text = ''
+                            if p.runs:
+                                p.runs[0].text = cleaned_text
 
     def fill_template(template_path, output_docx, output_pdf, replacements, satellite_type=None, source_type=None):
         """
@@ -4701,11 +4728,18 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
             for placeholder, image_path in replacements['images'].items():
                 _insert_image(doc, placeholder, image_path)
 
-        # 处理未使用的占位符（表一填"/"，表二删除行）
-        _cleanup_placeholders(doc, replacements, satellite_type, source_type)
+        # 处理模板中未使用的占位符（表一填"/"，表二删除行）
+        _handle_unused_placeholders(doc, replacements, satellite_type, source_type)
 
-        # 删除空小节并重新编号
+        # 对于现场数据报告，将所有 "XC卫星" 和 "XC" 替换为 "现场"
+        _replace_text(doc, 'XC卫星', '现场')
+        _replace_text(doc, 'XC', '现场')
+
+        # 删除所有章节中没有图片的小节并重新编号
         _remove_empty_subsections_and_renumber(doc)
+
+        # 清理所有未替换的占位符（移除大括号形式的参数名称）
+        _cleanup_placeholders(doc)
 
         doc.save(output_docx)
 
