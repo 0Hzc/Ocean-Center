@@ -31,9 +31,8 @@ from datetime import datetime
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.enum.table import WD_ALIGN_VERTICAL
 
-# 设置 Matplotlib 字体
+# 设置 Matplotlib 字体 - 仅设置基本配置，实际字体加载在run_check中执行
 import matplotlib.font_manager as fm
-plt.rcParams['font.sans-serif'] = ['SimHei', 'WenQuanYi Micro Hei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
 def load_config():
@@ -90,6 +89,28 @@ def run_check(config):
         sat_input_dir = sat_input_dir.replace('\\', '/')
         reference_input_dir = reference_input_dir.replace('\\', '/')
         # reports_input_dir = reports_input_dir.replace('\\', '/')
+
+        # 加载字体文件
+        from matplotlib import font_manager
+        import matplotlib.pyplot as plt
+
+        print(f"正在尝试加载字体: {font_path}")
+        if os.path.exists(font_path):
+            # 1. 核心：将字体文件加入 Matplotlib 管理器
+            font_manager.fontManager.addfont(font_path)
+
+            # 2. 设置全局字体为 SimHei
+            plt.rcParams['font.sans-serif'] = ['SimHei']
+
+            # 3. 解决负号显示为方块的问题
+            plt.rcParams['axes.unicode_minus'] = False
+
+            print("✅ 字体加载成功！Matplotlib 已锁定 SimHei。")
+        else:
+            print(f"❌ 严重警告：找不到字体文件！路径: {font_path}")
+            print("请检查 config.ini 中的路径是否与 Linux 实际路径完全一致（注意空格和下划线）。")
+            # 尝试使用备选字体
+            plt.rcParams['font.sans-serif'] = ['WenQuanYi Micro Hei', 'DejaVu Sans']
 
         # 确保输出目录存在
         os.makedirs(output_dir, exist_ok=True)
@@ -2117,12 +2138,18 @@ def step7(input_dir, output_dir):
             # print(f"使用一维数据处理逻辑")
             matched_data = []
             error_count = 0
-            
+
             for row in spaceresult:
                 try:
                     row_index, col_index, error = row
+                    # 检查是否有无穷值，跳过无效数据
+                    if np.isinf(row_index) or np.isinf(col_index) or np.isinf(error):
+                        error_count += 1
+                        if error_count < 5:
+                            print(f"跳过包含无穷值的数据: row={row_index}, col={col_index}, error={error}")
+                        continue
                     row_index_int = int(round(row_index))
-                    
+
                     if 0 <= row_index_int < len(lat):
                         matched_lat = lat[row_index_int][0]
                         matched_lon = lon[row_index_int][0]
@@ -2139,13 +2166,20 @@ def step7(input_dir, output_dir):
         else:
             # print(f"使用二维数据处理逻辑")
             matched_data = []
+            error_count = 0
             for row in spaceresult:
                 try:
                     row_index, col_index, error = row
+                    # 检查是否有无穷值，跳过无效数据
+                    if np.isinf(row_index) or np.isinf(col_index) or np.isinf(error):
+                        error_count += 1
+                        if error_count < 5:
+                            print(f"跳过包含无穷值的数据: row={row_index}, col={col_index}, error={error}")
+                        continue
                     row_index_int = int(round(row_index))
                     col_index_int = int(round(col_index))
-                    
-                    if (0 <= row_index_int < lat.shape[0] and 
+
+                    if (0 <= row_index_int < lat.shape[0] and
                         0 <= col_index_int < lat.shape[1]):
                         matched_lat = lat[row_index_int, col_index_int]
                         matched_lon = lon[row_index_int, col_index_int]
@@ -4341,7 +4375,326 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         if not found:
             print(f"未找到占位符 '{placeholder}' 的位置。")
 
-    def fill_template(template_path, output_docx, output_pdf, replacements):
+    def _fill_val_results_with_slash(doc, var_name, satellite_type, source_type):
+        """为未使用的val_results占位符填充'/'"""
+        placeholder = f'{{{{val_results_{var_name}}}}}'
+        # 处理XC（现场）的特殊情况
+        if source_type.upper() == 'XC':
+            validation_type = f'{satellite_type} vs 现场'
+        else:
+            validation_type = f'{satellite_type} vs {source_type}'
+        val_results = [[validation_type, '/', '/']]
+        _fill_table(doc, placeholder, val_results)
+
+    def _delete_col_results_row(doc, var_name):
+        """删除未使用的col_results占位符所在的整行"""
+        placeholder = f'{{{{col_results_{var_name}}}}}'
+
+        # 遍历所有表格，找到包含此占位符的行并删除
+        for table in doc.tables:
+            rows_to_delete = []
+            for i, row in enumerate(table.rows):
+                for cell in row.cells:
+                    if placeholder in cell.text:
+                        rows_to_delete.append(i)
+                        break
+
+            # 从后往前删除行，避免索引变化
+            for row_idx in sorted(rows_to_delete, reverse=True):
+                table._element.remove(table.rows[row_idx]._element)
+
+    def _remove_empty_subsections_and_renumber(doc):
+        """
+        删除所有没有图片和实质内容的小节，并重新编号
+        识别规则：小节标题格式为"X.Y"（如"3.1"、"8.2"、"10.1"等）
+        """
+        import re
+        from collections import defaultdict
+
+        print("\n" + "="*80)
+        print("【调试】开始删除空小节并重新编号")
+        print("="*80)
+
+        # 第一步：找出需要删除的段落范围
+        paragraphs_to_delete_objs = []  # 存储段落对象而不是索引
+        subsection_info = []  # 记录所有小节信息：(para_idx, para_obj, chapter, subsection, text)
+
+        # 识别所有小节标题（X.Y格式，如3.1、8.2、10.1等）
+        subsection_pattern = re.compile(r'^(\d+)\.(\d+)')
+
+        for i, para in enumerate(doc.paragraphs):
+            text = para.text.strip()
+            # 检查是否是小节标题
+            match = subsection_pattern.match(text)
+            if match:
+                chapter = int(match.group(1))
+                subsection = int(match.group(2))
+                subsection_info.append((i, para, chapter, subsection, text))
+
+        print(f"\n【调试】找到 {len(subsection_info)} 个小节标题")
+
+        # 第二步：检查每个小节是否包含内容
+        empty_subsections = []
+        for idx in range(len(subsection_info)):
+            start_idx = subsection_info[idx][0]
+            start_para_obj = subsection_info[idx][1]
+            chapter = subsection_info[idx][2]
+            subsection = subsection_info[idx][3]
+            title = subsection_info[idx][4]
+
+            # 确定小节结束位置
+            end_idx = subsection_info[idx + 1][0] if idx + 1 < len(subsection_info) else len(doc.paragraphs)
+
+            # 检查这个小节是否为空
+            has_content = False
+            has_image = False
+            has_placeholder = False
+            content_details = []
+
+            for para_idx in range(start_idx + 1, end_idx):
+                if para_idx < len(doc.paragraphs):
+                    check_para = doc.paragraphs[para_idx]
+                    text = check_para.text.strip()
+
+                    # 检查段落中是否有图片
+                    for run in check_para.runs:
+                        if run._element.xpath('.//a:blip', namespaces={'a': 'http://schemas.openxmlformats.org/drawingml/2006/main'}):
+                            has_image = True
+                            has_content = True
+                            break
+
+                    # 跳过空白、小节标题和章节标题
+                    if not text or subsection_pattern.match(text):
+                        continue
+
+                    # 跳过章节标题
+                    chapter_title_pattern = re.compile(r'^\d+\s+[^\d]')
+                    if chapter_title_pattern.match(text):
+                        continue
+
+                    # 检查是否只是占位符
+                    if '{{' in text and '}}' in text:
+                        has_placeholder = True
+                        continue
+
+                    # 有实际内容
+                    has_content = True
+                    break
+
+            # 如果小节为空，收集该小节的段落
+            if not has_content:
+                empty_subsections.append((chapter, subsection, title))
+                print(f"  >>> 标记为删除: {chapter}.{subsection}")
+
+                chapter_title_pattern_local = re.compile(r'^\d+\s+[^\d]')
+                for para_idx in range(start_idx, end_idx):
+                    if para_idx < len(doc.paragraphs):
+                        para_obj = doc.paragraphs[para_idx]
+                        para_text = para_obj.text.strip()
+                        if para_idx > start_idx and chapter_title_pattern_local.match(para_text):
+                            break
+                        if para_obj not in paragraphs_to_delete_objs:
+                            paragraphs_to_delete_objs.append(para_obj)
+
+        print(f"\n【调试】共标记 {len(empty_subsections)} 个小节待删除")
+
+        # 第三步：识别空章节
+        deleted_chapters = set()
+        for chapter, subsection, title in empty_subsections:
+            deleted_chapters.add(chapter)
+
+        chapters_to_delete = set()
+        for chapter in deleted_chapters:
+            chapter_subsections = [s for s in subsection_info if s[2] == chapter]
+            all_deleted = all((chapter, s[3], s[4]) in empty_subsections for s in chapter_subsections)
+            if all_deleted:
+                chapters_to_delete.add(chapter)
+
+        print(f"\n【调试】需要删除的空章节: {sorted(chapters_to_delete)}")
+
+        # 第四步：收集章节标题对象
+        chapter_title_pattern = re.compile(r'^(\d+)\s+[^\d]')
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            match = chapter_title_pattern.match(text)
+            if match:
+                chapter_num = int(match.group(1))
+                if chapter_num in chapters_to_delete:
+                    print(f"【调试】标记删除章节标题: {text[:60]}...")
+                    if para not in paragraphs_to_delete_objs:
+                        paragraphs_to_delete_objs.append(para)
+
+        # 第五步：统一删除所有标记的段落
+        print(f"\n【调试】开始删除 {len(paragraphs_to_delete_objs)} 个段落...")
+        for para_obj in paragraphs_to_delete_objs:
+            try:
+                p_element = para_obj._element
+                p_element.getparent().remove(p_element)
+            except Exception as e:
+                print(f"【警告】删除段落时出错: {e}")
+                continue
+
+        print(f"【调试】删除完成")
+
+        # 第六步：重新编号章节和小节
+        print(f"\n【调试】开始重新编号章节和小节...")
+
+        remaining_chapters = []
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            match = chapter_title_pattern.match(text)
+            if match:
+                chapter_num = int(match.group(1))
+                if chapter_num >= 3 and chapter_num not in remaining_chapters:
+                    remaining_chapters.append(chapter_num)
+
+        chapter_mapping = {}
+        for new_num, old_num in enumerate(sorted(remaining_chapters), start=3):
+            chapter_mapping[old_num] = new_num
+
+        print(f"【调试】章节映射: {chapter_mapping}")
+
+        # 重新编号章节标题
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            match = chapter_title_pattern.match(text)
+            if match:
+                old_chapter = int(match.group(1))
+                if old_chapter in chapter_mapping:
+                    new_chapter = chapter_mapping[old_chapter]
+                    if new_chapter != old_chapter:
+                        old_text = text
+                        new_text = re.sub(r'^\d+', str(new_chapter), text)
+                        para.text = new_text
+                        print(f"  重新编号章节: {old_text[:40]}... -> {new_text[:40]}...")
+
+        # 重新编号小节标题
+        chapter_counters = defaultdict(int)
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            match = subsection_pattern.match(text)
+            if match:
+                old_chapter = int(match.group(1))
+                if old_chapter in chapter_mapping:
+                    new_chapter = chapter_mapping[old_chapter]
+                    chapter_counters[new_chapter] += 1
+                    new_subsection = chapter_counters[new_chapter]
+
+                    old_text = text
+                    new_text = re.sub(r'^\d+\.\d+', f'{new_chapter}.{new_subsection}', text)
+                    para.text = new_text
+
+        print("\n" + "="*80)
+        print("【调试】空小节删除和重新编号完成")
+        print("="*80 + "\n")
+
+
+    def _handle_unused_placeholders(doc, replacements, satellite_type, source_type):
+        """
+        处理模板中存在但未使用的占位符
+        - 表一（val_results）：填写检验类型和"/"
+        - 表二（col_results）：删除整行
+        - 第三章图片占位符：由_remove_empty_subsections_and_renumber处理
+        """
+        import re
+
+        print("\n" + "="*80)
+        print("【调试】开始处理未使用的占位符")
+        print("="*80)
+
+        used_tables = set(replacements.get('tables', {}).keys()) if replacements else set()
+        used_images = set(replacements.get('images', {}).keys()) if replacements else set()
+
+        # 收集文档中所有的占位符
+        all_placeholders = set()
+        placeholder_pattern = re.compile(r'\{\{([^}]+)\}\}')
+
+        for p in doc.paragraphs:
+            text = p.text
+            matches = placeholder_pattern.findall(text)
+            for m in matches:
+                all_placeholders.add(m)
+
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    text = cell.text
+                    matches = placeholder_pattern.findall(text)
+                    for m in matches:
+                        all_placeholders.add(m)
+
+        print(f"【调试】模板中发现的所有占位符总数: {len(all_placeholders)}")
+
+        # 按类型分类占位符
+        image_placeholders = [p for p in all_placeholders if any(x in p for x in ['_sct', '_geo', '_map', '_chart'])]
+        val_placeholders = [p for p in all_placeholders if p.startswith('val_results_')]
+        col_placeholders = [p for p in all_placeholders if p.startswith('col_results_')]
+
+        print(f"  - 图片占位符: {len(image_placeholders)}")
+        print(f"  - 表一占位符 (val_results): {len(val_placeholders)}")
+        print(f"  - 表二占位符 (col_results): {len(col_placeholders)}")
+
+        # 处理未使用的表格占位符
+        val_pattern = re.compile(r'^val_results_(\w+)$')
+        col_pattern = re.compile(r'^col_results_(\w+)$')
+
+        for placeholder in all_placeholders:
+            # 处理val_results（表一）：填写"/"
+            match = val_pattern.match(placeholder)
+            if match:
+                full_placeholder = f'{{{{{placeholder}}}}}'
+                if full_placeholder not in used_tables:
+                    var_name = match.group(1)
+                    print(f"【调试】填充未使用的val_results: {full_placeholder}")
+                    _fill_val_results_with_slash(doc, var_name, satellite_type, source_type)
+
+            # 处理col_results（表二）：删除整行
+            match = col_pattern.match(placeholder)
+            if match:
+                full_placeholder = f'{{{{{placeholder}}}}}'
+                if full_placeholder not in used_tables:
+                    var_name = match.group(1)
+                    print(f"【调试】删除未使用的col_results行: {full_placeholder}")
+                    _delete_col_results_row(doc, var_name)
+
+        print("\n" + "="*80)
+        print("【调试】未使用占位符处理完成")
+        print("="*80 + "\n")
+
+    def _cleanup_placeholders(doc):
+        """清理所有未替换的占位符（移除大括号形式的参数名称）"""
+        import re
+        placeholder_pattern = re.compile(r'\{\{[^}]+\}\}')
+
+        # 清理段落中的占位符
+        for p in doc.paragraphs:
+            # 检查段落的整体文本（处理占位符跨多个run的情况）
+            if placeholder_pattern.search(p.text):
+                cleaned_text = placeholder_pattern.sub('', p.text)
+                # 清空所有run并设置新文本
+                for run in p.runs:
+                    run.text = ''
+                if cleaned_text.strip():  # 如果清理后还有文本
+                    if p.runs:
+                        p.runs[0].text = cleaned_text
+                elif p.runs:  # 如果清理后没有文本，保持空段落
+                    p.runs[0].text = cleaned_text
+
+        # 清理表格中的占位符
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        # 检查段落的整体文本
+                        if placeholder_pattern.search(p.text):
+                            cleaned_text = placeholder_pattern.sub('', p.text)
+                            # 清空所有run并设置新文本
+                            for run in p.runs:
+                                run.text = ''
+                            if p.runs:
+                                p.runs[0].text = cleaned_text
+
+    def fill_template(template_path, output_docx, output_pdf, replacements, satellite_type=None, source_type=None):
         """
         自动填充Word模板并转换为PDF
 
@@ -4349,8 +4702,16 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         :param output_docx: 输出的docx文件路径
         :param output_pdf: 输出的pdf文件路径
         :param replacements: 包含替换内容的字典
+        :param satellite_type: 卫星类型（用于处理未使用的占位符）
+        :param source_type: 数据源类型（用于处理未使用的占位符）
         """
         doc = Document(template_path)
+
+        # 从replacements中获取satellite_type和source_type（如果没有传入）
+        if satellite_type is None and 'text' in replacements:
+            satellite_type = replacements['text'].get('{{satellite_type}}', 'HY1E')
+        if source_type is None and 'text' in replacements:
+            source_type = replacements['text'].get('{{source_type}}', 'TERRA')
 
         # 文本替换
         if 'text' in replacements:
@@ -4366,6 +4727,19 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         if 'images' in replacements:
             for placeholder, image_path in replacements['images'].items():
                 _insert_image(doc, placeholder, image_path)
+
+        # 处理模板中未使用的占位符（表一填"/"，表二删除行）
+        _handle_unused_placeholders(doc, replacements, satellite_type, source_type)
+
+        # 对于现场数据报告，将所有 "XC卫星" 和 "XC" 替换为 "现场"
+        _replace_text(doc, 'XC卫星', '现场')
+        _replace_text(doc, 'XC', '现场')
+
+        # 删除所有章节中没有图片的小节并重新编号
+        _remove_empty_subsections_and_renumber(doc)
+
+        # 清理所有未替换的占位符（移除大括号形式的参数名称）
+        _cleanup_placeholders(doc)
 
         doc.save(output_docx)
 
@@ -4394,7 +4768,9 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         template_path,
         output_docx=os.path.join(save_path, f'{satellite_type.upper()}_COCTS_{source_org_type.upper()}_val_report_{datestr}.docx'),
         output_pdf=os.path.join(save_path, f'{satellite_type.upper()}_COCTS_{source_org_type.upper()}_val_report_{datestr}.pdf'),
-        replacements=replacements
+        replacements=replacements,
+        satellite_type=satellite_type,
+        source_type=source_org_type
     )
 
     hy1d_cocts_daily_report(datestr, input_temp, input_img, coldata_path, output_path, satellite_type,source_org_type)
