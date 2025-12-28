@@ -2065,19 +2065,31 @@ def step7(input_dir, output_dir):
             with open(file_path, 'r') as f:
                 data = []
                 line_count = 0
+                skipped_inf = 0
                 for line in f:
                     try:
                         values = line.strip().split()
                         if len(values) >= 4:
-                            row_index = int(float(values[0]))
-                            col_index = int(float(values[1]))
+                            # 先转换为float检查是否为infinity
+                            row_float = float(values[0])
+                            col_float = float(values[1])
                             error = float(values[3])  # 使用第4列
+
+                            # 跳过包含infinity的行
+                            if np.isinf(row_float) or np.isinf(col_float) or np.isinf(error):
+                                skipped_inf += 1
+                                continue
+
+                            row_index = int(row_float)
+                            col_index = int(col_float)
                             data.append([row_index, col_index, error])
                         line_count += 1
                     except ValueError as e:
                         continue
                 print(f"valresult文件总行数: {line_count}")
                 print(f"成功解析的数据行数: {len(data)}")
+                if skipped_inf > 0:
+                    print(f"跳过的infinity值行数: {skipped_inf}")
                 if data:
                     print(f"数据样例（前3行）: {data[:3]}")
                 return data, "valresult" if data else (None, None)
@@ -4456,12 +4468,19 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                     check_para = doc.paragraphs[para_idx]
                     text = check_para.text.strip()
 
-                    # 检查段落中是否有图片
+                    # 先检查是否包含图片（即使文本为空也要检查，因为插入图片后文本会被清空）
                     for run in check_para.runs:
-                        if run._element.xpath('.//a:blip', namespaces={'a': 'http://schemas.openxmlformats.org/drawingml/2006/main'}):
-                            has_image = True
-                            has_content = True
-                            break
+                        if hasattr(run, '_element'):
+                            drawings = run._element.findall('./{http://schemas.openxmlformats.org/wordprocessingml/2006/main}drawing')
+                            if drawings:
+                                has_image = True
+                                content_details.append(f"图片")
+                                break
+
+                    # 如果有图片，则认为有内容
+                    if has_image:
+                        has_content = True
+                        break
 
                     # 跳过空白、小节标题和章节标题
                     if not text or subsection_pattern.match(text):
@@ -4470,6 +4489,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                     # 跳过章节标题
                     chapter_title_pattern = re.compile(r'^\d+\s+[^\d]')
                     if chapter_title_pattern.match(text):
+                        content_details.append(f"章节标题: {text[:40]}...")
                         continue
 
                     # 检查是否只是占位符
@@ -4479,7 +4499,14 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
                     # 有实际内容
                     has_content = True
+                    content_details.append(f"内容: {text[:40]}...")
                     break
+
+            # 输出每个小节的检查结果（用于调试）
+            print(f"\n【调试】小节 {chapter}.{subsection}:")
+            print(f"  标题: {title[:60]}...")
+            print(f"  有内容: {has_content}, 有图片: {has_image}, 有占位符: {has_placeholder}")
+            print(f"  内容详情: {content_details if content_details else '无'}")
 
             # 如果小节为空，收集该小节的段落
             if not has_content:
