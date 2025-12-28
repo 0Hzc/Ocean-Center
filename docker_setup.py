@@ -33,7 +33,7 @@ from docx.enum.table import WD_ALIGN_VERTICAL
 
 # 设置 Matplotlib 字体
 import matplotlib.font_manager as fm
-plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'WenQuanYi Micro Hei', 'DejaVu Sans']
+plt.rcParams['font.sans-serif'] = ['SimHei', 'WenQuanYi Micro Hei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
 def load_config():
@@ -193,10 +193,13 @@ def run_check(config):
         organize_files(output_dir, output_dir)
 
         # # 步骤13：生成报告
-        input_temp = './input/05_reports'
-        input_img = './output/04_visualization'
-        coldata_path = './output/05_reports'
-        output_path = './output/05_reports'
+        input_temp = os.path.join(input_dir, '05_reports')
+        input_img = os.path.join(output_dir, '04_visualization')
+        coldata_path = os.path.join(output_dir, '05_reports')
+        output_path = os.path.join(output_dir, '05_reports')
+        # 确保目录存在
+        os.makedirs(coldata_path, exist_ok=True)
+        os.makedirs(input_img, exist_ok=True)
         oc_file=os.path.join(sat_input_dir, config[satellite_type]['l2a_file'])
         # oc_file = "H1E_OPER_OCT_L2A_20250328T025500_20250328T030000_06779_10.h5"
         beijing_time = extract_datetime(oc_file)
@@ -2932,10 +2935,10 @@ def generate_satellite_statistics_file(filename, total_pixels, valid_pixels,
     except Exception as e:
         print(f"生成统计文件时出错: {str(e)}")
 
-def generate_satellite_plots(valid_pixels, total_pixels, time_diff_counts, 
+def generate_satellite_plots(valid_pixels, total_pixels, time_diff_counts,
                         difference_counts, output_directory, product, satellite_type, timestamp=None):
     """生成卫星交叉验证统计图"""
-    plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
+    plt.rcParams['font.sans-serif'] = ['SimHei']
     plt.rcParams['axes.unicode_minus'] = False
     
     product_names = {
@@ -3326,10 +3329,10 @@ def generate_ground_statistics_file(filename, valid_images, time_diff_counts,
     except Exception as e:
         print(f"生成统计文件时出错: {str(e)}")
 
-def generate_ground_plots(time_diff_counts, valid_ratio_counts, cv_value_counts, 
+def generate_ground_plots(time_diff_counts, valid_ratio_counts, cv_value_counts,
                      difference_counts, output_directory, product, timestamp=None):
     """生成现场验证统计图"""
-    plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
+    plt.rcParams['font.sans-serif'] = ['SimHei']
     plt.rcParams['axes.unicode_minus'] = False
     
     product_names = {
