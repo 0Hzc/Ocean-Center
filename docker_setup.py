@@ -2139,35 +2139,56 @@ def step7(input_dir, output_dir):
 
     def get_product_type(filename):
         """根据文件名判断产品类型"""
-        filename = filename.lower()
-        if 'CDOM' in filename:
+        filename_upper = filename.upper()
+        if 'SST' in filename_upper:
+            return 'SST'
+        elif 'IPAR' in filename_upper:
+            return 'IPAR'
+        elif 'CDOM' in filename_upper:
             return 'CDOM'
-        elif 'TSM' in filename:
+        elif 'TSM' in filename_upper:
             return 'TSM'
+        elif 'KD' in filename_upper:
+            return 'Kd'
+        elif 'RRS' in filename_upper:
+            return 'Rrs'
+        return None
 
     def match_coordinates(spaceresult, lat, lon, filename):
         """根据行列号匹配经纬度坐标并计算误差百分比"""
         print(f"\n开始坐标匹配...")
-        # print(f"输入数据大小: spaceresult={len(spaceresult)}, lat shape={lat.shape}, lon shape={lon.shape}")
-        
+        print(f"【调试】输入数据: spaceresult={len(spaceresult)}行, lat.shape={lat.shape}, lon.shape={lon.shape}")
+
         # 获取产品类型
         product_type = get_product_type(filename)
         print(f"识别的产品类型: {product_type}")
-        
+
+        # 打印前3行数据样例
+        if spaceresult:
+            print(f"【调试】valresult数据样例(前3行):")
+            for i, row in enumerate(spaceresult[:3]):
+                print(f"   行{i}: row_idx={row[0]}, col_idx={row[1]}, error={row[2]}")
+
         # 根据数据类型选择处理逻辑
-        if product_type in ['SST', 'IPAR'] and lat.shape[1] == 1:
-            # print(f"使用一维数据处理逻辑")
+        is_1d_data = lat.shape[1] == 1
+        use_1d_logic = product_type in ['SST', 'IPAR'] and is_1d_data
+        print(f"【调试】lat是一维数据: {is_1d_data}, 使用一维处理逻辑: {use_1d_logic}")
+
+        if use_1d_logic:
+            print(f"【调试】使用一维数据处理逻辑 (SST/IPAR专用)")
             matched_data = []
             error_count = 0
+            out_of_range_count = 0
+            inf_count = 0
 
-            for row in spaceresult:
+            for i, row in enumerate(spaceresult):
                 try:
                     row_index, col_index, error = row
                     # 检查是否有无穷值，跳过无效数据
                     if np.isinf(row_index) or np.isinf(col_index) or np.isinf(error):
-                        error_count += 1
-                        if error_count < 5:
-                            print(f"跳过包含无穷值的数据: row={row_index}, col={col_index}, error={error}")
+                        inf_count += 1
+                        if inf_count < 5:
+                            print(f"【调试】跳过无穷值(第{i}行): row={row_index}, col={col_index}, error={error}")
                         continue
                     row_index_int = int(round(row_index))
 
@@ -2176,26 +2197,31 @@ def step7(input_dir, output_dir):
                         matched_lon = lon[row_index_int][0]
                         matched_data.append([matched_lat, matched_lon, error])
                     else:
-                        error_count += 1
-                        if error_count < 5:
-                            print(f"索引超出范围: row={row_index_int}, col={col_index}, lat.shape={lat.shape}")
+                        out_of_range_count += 1
+                        if out_of_range_count < 5:
+                            print(f"【调试】索引超出范围(第{i}行): row_idx={row_index_int}, 有效范围=[0,{len(lat)-1}]")
                 except Exception as e:
                     error_count += 1
                     if error_count < 5:
-                        print(f"处理数据时出错: {e}, 数据: {row}")
+                        print(f"【调试】处理异常(第{i}行): {e}, 数据: {row}")
                     continue
+
+            print(f"【调试】一维匹配详情: inf跳过={inf_count}, 索引超出={out_of_range_count}, 其他异常={error_count}")
         else:
-            # print(f"使用二维数据处理逻辑")
+            print(f"【调试】使用二维数据处理逻辑")
             matched_data = []
             error_count = 0
-            for row in spaceresult:
+            out_of_range_count = 0
+            inf_count = 0
+
+            for i, row in enumerate(spaceresult):
                 try:
                     row_index, col_index, error = row
                     # 检查是否有无穷值，跳过无效数据
                     if np.isinf(row_index) or np.isinf(col_index) or np.isinf(error):
-                        error_count += 1
-                        if error_count < 5:
-                            print(f"跳过包含无穷值的数据: row={row_index}, col={col_index}, error={error}")
+                        inf_count += 1
+                        if inf_count < 5:
+                            print(f"【调试】跳过无穷值(第{i}行): row={row_index}, col={col_index}, error={error}")
                         continue
                     row_index_int = int(round(row_index))
                     col_index_int = int(round(col_index))
@@ -2205,8 +2231,18 @@ def step7(input_dir, output_dir):
                         matched_lat = lat[row_index_int, col_index_int]
                         matched_lon = lon[row_index_int, col_index_int]
                         matched_data.append([matched_lat, matched_lon, error])
-                except Exception:
+                    else:
+                        out_of_range_count += 1
+                        if out_of_range_count < 5:
+                            print(f"【调试】索引超出范围(第{i}行): row_idx={row_index_int}, col_idx={col_index_int}, "
+                                  f"有效范围: row=[0,{lat.shape[0]-1}], col=[0,{lat.shape[1]-1}]")
+                except Exception as e:
+                    error_count += 1
+                    if error_count < 5:
+                        print(f"【调试】处理异常(第{i}行): {e}")
                     continue
+
+            print(f"【调试】二维匹配详情: inf跳过={inf_count}, 索引超出={out_of_range_count}, 其他异常={error_count}")
         
         print(f"匹配结果统计:")
         print(f"- 成功匹配的点数: {len(matched_data)}")
