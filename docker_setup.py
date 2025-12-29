@@ -4239,7 +4239,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
     # 定义TERRA_VAR_CONFIG
     TERRA_VAR_CONFIG = {
-        # 'sst': {'sources': ['TERRA'], 'unit': 'K', 'col_values': [25, 1800]},
+        'sst': {'sources': ['TERRA'], 'unit': 'K', 'col_values': [25, 1800]},
         'chl': {'sources': ['TERRA'], 'unit': 'mg/m³', 'col_values': [25, 1800]},
         'Rrs412': {'sources': ['TERRA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'Rrs443': {'sources': ['TERRA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
