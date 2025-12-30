@@ -4302,15 +4302,32 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         :param satellite_type: 卫星类型
         :return: bias, rms, n
         """
-        filepath = os.path.join(coldata_path, f'{satellite_type}_COCTS_{reference}_{var_name}_report_{datestr}.txt')
-        if not os.path.exists(filepath):
+        # 尝试多种大小写组合查找文件
+        var_name_variants = [var_name, var_name.upper(), var_name.lower()]
+        filepath = None
+
+        for var in var_name_variants:
+            test_path = os.path.join(coldata_path, f'{satellite_type}_COCTS_{reference}_{var}_report_{datestr}.txt')
+            if os.path.exists(test_path):
+                filepath = test_path
+                break
+
+        if not filepath:
             files = os.listdir(coldata_path)
-            pattern = f'{satellite_type}_COCTS_{reference}_{var_name}_report_{datestr}'
-            matching_files = [f for f in files if pattern in f]
-            if matching_files:
-                filepath = os.path.join(coldata_path, matching_files[0])
-            else:
-                raise FileNotFoundError(f"找不到匹配的报告文件: {pattern}")
+            # 使用不区分大小写的匹配
+            for var in var_name_variants:
+                pattern = f'{satellite_type}_COCTS_{reference}_{var}_report_{datestr}'
+                matching_files = [f for f in files if pattern.lower() in f.lower()]
+                if matching_files:
+                    filepath = os.path.join(coldata_path, matching_files[0])
+                    break
+
+        if not filepath:
+            print(f"【调试】calc_metric: 找不到报告文件")
+            print(f"   - 查找路径: {coldata_path}")
+            print(f"   - 变量名变体: {var_name_variants}")
+            print(f"   - 参考源: {reference}, 日期: {datestr}")
+            raise FileNotFoundError(f"找不到匹配的报告文件: {satellite_type}_COCTS_{reference}_{var_name}_report_{datestr}")
 
         bias = None
         rms = None
@@ -4352,10 +4369,17 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         }
 
         for var_name, config in VAR_CONFIG.items():
-            metrics = {
-                source: dict(zip(['bias', 'rms', 'n'], calc_metric(coldata_path, source, var_name, datestr, satellite_type)))
-                for source in config['sources']
-            }
+            try:
+                metrics = {
+                    source: dict(zip(['bias', 'rms', 'n'], calc_metric(coldata_path, source, var_name, datestr, satellite_type)))
+                    for source in config['sources']
+                }
+            except FileNotFoundError as e:
+                print(f"【警告】{var_name}产品报告文件未找到，跳过: {e}")
+                continue
+            except Exception as e:
+                print(f"【警告】{var_name}产品数据读取失败，跳过: {e}")
+                continue
 
             # 根据产品类型设置单位
             unit = config['unit']
