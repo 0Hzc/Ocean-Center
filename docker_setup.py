@@ -1789,13 +1789,31 @@ def satellite_validation(input_path, output_path):
             # 处理数据
             print("开始处理数据...")
             data = []
+            skipped_nan_inf = 0
+            skipped_small_value = 0
             for i in range(len(Rrs1)):
+                # 检查nan和inf
+                if np.isnan(Rrs1[i]) or np.isnan(Rrs2[i]) or np.isinf(Rrs1[i]) or np.isinf(Rrs2[i]):
+                    skipped_nan_inf += 1
+                    continue
+
                 if flag1[i] == 0 and Rrs2[i] != -999 and Rrs2[i] != 0:
                     if product.lower() == 'sst':
                         diff = abs(Rrs1[i] - Rrs2[i])
                     else:
+                        # 检查分母是否太小，避免除法溢出
+                        if abs(Rrs2[i]) < 1e-10:
+                            skipped_small_value += 1
+                            continue
                         diff = abs((Rrs1[i] - Rrs2[i]) / Rrs2[i]) * 100
+                        # 检查计算结果是否为inf
+                        if np.isinf(diff):
+                            skipped_nan_inf += 1
+                            continue
                     data.append([i, Rrs1[i], Rrs2[i], diff])
+
+            if skipped_nan_inf > 0 or skipped_small_value > 0:
+                print(f"【数据过滤】跳过nan/inf值: {skipped_nan_inf}, 跳过过小分母值: {skipped_small_value}")
 
             if not data:
                 print("警告: 没有有效的数据点，跳过处理")
