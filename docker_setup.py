@@ -338,15 +338,45 @@ def process_hy_data(hy_file_l2a, hy_file_l2b, hy_file_l2c, hy_file_l2t,output_di
                 
 
         with h5py.File(hy_file_l2c, 'r') as h5_file:
-            # 保存参数数据
-            ipar_data = h5_file['Geophysical Data/IPAR'][:]
-            save_data_to_txt(ipar_data, 
+            # 保存IPAR数据，需要清洗异常值
+            ipar_dataset = h5_file['Geophysical Data/IPAR']
+            ipar_data = ipar_dataset[:].astype(float)
+
+            # 获取有效范围属性
+            valid_min = ipar_dataset.attrs.get('ValidMin', 0.0)
+            valid_max = ipar_dataset.attrs.get('ValidMax', 10.0)
+            fill_value = ipar_dataset.attrs.get('_FillValue', -999.0)
+
+            # 清洗数据：将inf/nan和超范围值替换为fill_value
+            invalid_mask = (np.isnan(ipar_data) | np.isinf(ipar_data) |
+                           (ipar_data < valid_min) | (ipar_data > valid_max))
+            invalid_count = np.sum(invalid_mask & (ipar_data != fill_value))
+            if invalid_count > 0:
+                print(f"【IPAR数据清洗】发现{invalid_count}个异常值(inf/nan/超范围)，已替换为{fill_value}")
+            ipar_data[invalid_mask] = fill_value
+
+            save_data_to_txt(ipar_data,
                                os.path.join(output_dir, f'{prefix}_ipar_{time_str}.txt'))
 
         with h5py.File(hy_file_l2t, 'r') as h5_file:
-            # 保存参数数据
-            ipar_data = h5_file['Geophysical Data/SST'][:]
-            save_data_to_txt(ipar_data, 
+            # 保存SST数据，需要清洗异常值
+            sst_dataset = h5_file['Geophysical Data/SST']
+            sst_data = sst_dataset[:].astype(float)
+
+            # 获取有效范围属性 (SST单位通常是开尔文，范围约270-320K)
+            valid_min = sst_dataset.attrs.get('ValidMin', 270.0)
+            valid_max = sst_dataset.attrs.get('ValidMax', 320.0)
+            fill_value = sst_dataset.attrs.get('_FillValue', -999.0)
+
+            # 清洗数据：将inf/nan和超范围值替换为fill_value
+            invalid_mask = (np.isnan(sst_data) | np.isinf(sst_data) |
+                           (sst_data < valid_min) | (sst_data > valid_max))
+            invalid_count = np.sum(invalid_mask & (sst_data != fill_value))
+            if invalid_count > 0:
+                print(f"【SST数据清洗】发现{invalid_count}个异常值(inf/nan/超范围)，已替换为{fill_value}")
+            sst_data[invalid_mask] = fill_value
+
+            save_data_to_txt(sst_data,
                                os.path.join(output_dir, f'{prefix}_sst_{time_str}.txt'))
 
         print('\nHY1E数据处理完成\n')
