@@ -4647,8 +4647,11 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                         # 清空当前行的数据
                         for c in row.cells:
                             c.text = ""
-                        # 填充新数据到单元格
+                        # 填充新数据到单元格（确保不超出表格列数）
+                        num_cells = len(row.cells)
                         for i, value in enumerate(table_data[0]):  # 只取第一个子列表的数据
+                            if i >= num_cells:
+                                break  # 防止索引越界
                             cell = row.cells[i]
                             cell.text = str(value)
                             # 设置水平居中
