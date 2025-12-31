@@ -1818,14 +1818,79 @@ def satellite_validation(input_path, output_path):
             
             # 处理数据
             print("开始处理数据...")
+
+            # 【调试】详细统计各条件过滤情况
+            print(f"\n{'='*60}")
+            print(f"【匹配调试】产品: {product}")
+            print(f"{'='*60}")
+            print(f"  总数据点数: {len(Rrs1)}")
+
+            # 统计Rrs1（HY1E数据）的情况
+            rrs1_arr = np.array(Rrs1)
+            rrs1_valid = np.sum((rrs1_arr != -999) & (~np.isnan(rrs1_arr)) & (~np.isinf(rrs1_arr)))
+            rrs1_minus999 = np.sum(rrs1_arr == -999)
+            rrs1_nan = np.sum(np.isnan(rrs1_arr))
+            rrs1_inf = np.sum(np.isinf(rrs1_arr))
+            print(f"  Rrs1(HY1E)统计:")
+            print(f"    - 有效值数量: {rrs1_valid}")
+            print(f"    - -999值数量: {rrs1_minus999}")
+            print(f"    - NaN数量: {rrs1_nan}")
+            print(f"    - Inf数量: {rrs1_inf}")
+
+            # 统计Rrs2（参考数据）的情况
+            rrs2_arr = np.array(Rrs2)
+            rrs2_valid = np.sum((rrs2_arr != -999) & (rrs2_arr != 0) & (~np.isnan(rrs2_arr)) & (~np.isinf(rrs2_arr)))
+            rrs2_minus999 = np.sum(rrs2_arr == -999)
+            rrs2_zero = np.sum(rrs2_arr == 0)
+            rrs2_nan = np.sum(np.isnan(rrs2_arr))
+            rrs2_inf = np.sum(np.isinf(rrs2_arr))
+            print(f"  Rrs2({source})统计:")
+            print(f"    - 有效值数量: {rrs2_valid}")
+            print(f"    - -999值数量: {rrs2_minus999}")
+            print(f"    - 0值数量: {rrs2_zero}")
+            print(f"    - NaN数量: {rrs2_nan}")
+            print(f"    - Inf数量: {rrs2_inf}")
+
+            # 统计flag1的情况
+            flag1_arr = np.array(flag1)
+            flag1_zero = np.sum(flag1_arr == 0)
+            flag1_nonzero = np.sum(flag1_arr != 0)
+            print(f"  flag1统计:")
+            print(f"    - flag=0数量: {flag1_zero}")
+            print(f"    - flag!=0数量: {flag1_nonzero}")
+
             data = []
+            # 详细记录各过滤条件
+            filter_stats = {'flag_nonzero': 0, 'rrs2_minus999': 0, 'rrs2_zero': 0, 'rrs1_invalid': 0, 'valid': 0}
             for i in range(len(Rrs1)):
-                if flag1[i] == 0 and Rrs2[i] != -999 and Rrs2[i] != 0:
-                    if product.lower() == 'sst':
-                        diff = abs(Rrs1[i] - Rrs2[i])
-                    else:
-                        diff = abs((Rrs1[i] - Rrs2[i]) / Rrs2[i]) * 100
-                    data.append([i, Rrs1[i], Rrs2[i], diff])
+                if flag1[i] != 0:
+                    filter_stats['flag_nonzero'] += 1
+                    continue
+                if Rrs2[i] == -999:
+                    filter_stats['rrs2_minus999'] += 1
+                    continue
+                if Rrs2[i] == 0:
+                    filter_stats['rrs2_zero'] += 1
+                    continue
+                # 检查Rrs1是否有效（新增）
+                if Rrs1[i] == -999 or np.isnan(Rrs1[i]) or np.isinf(Rrs1[i]):
+                    filter_stats['rrs1_invalid'] += 1
+                    continue
+
+                if product.lower() == 'sst':
+                    diff = abs(Rrs1[i] - Rrs2[i])
+                else:
+                    diff = abs((Rrs1[i] - Rrs2[i]) / Rrs2[i]) * 100
+                data.append([i, Rrs1[i], Rrs2[i], diff])
+                filter_stats['valid'] += 1
+
+            print(f"  过滤统计:")
+            print(f"    - flag!=0被过滤: {filter_stats['flag_nonzero']}")
+            print(f"    - Rrs2=-999被过滤: {filter_stats['rrs2_minus999']}")
+            print(f"    - Rrs2=0被过滤: {filter_stats['rrs2_zero']}")
+            print(f"    - Rrs1无效(-999/nan/inf)被过滤: {filter_stats['rrs1_invalid']}")
+            print(f"    - 最终有效数据点: {filter_stats['valid']}")
+            print(f"{'='*60}\n")
 
             if not data:
                 print("警告: 没有有效的数据点，跳过处理")
