@@ -347,13 +347,37 @@ def process_hy_data(hy_file_l2a, hy_file_l2b, hy_file_l2c, hy_file_l2t,output_di
             valid_max = ipar_dataset.attrs.get('ValidMax', 10.0)
             fill_value = ipar_dataset.attrs.get('_FillValue', -999.0)
 
-            # 清洗数据：将inf/nan和超范围值替换为fill_value
-            invalid_mask = (np.isnan(ipar_data) | np.isinf(ipar_data) |
-                           (ipar_data < valid_min) | (ipar_data > valid_max))
-            invalid_count = np.sum(invalid_mask & (ipar_data != fill_value))
+            # 【调试】输出数据清洗前的统计
+            print(f"\n{'='*60}")
+            print(f"【IPAR数据清洗调试】")
+            print(f"{'='*60}")
+            print(f"  ValidMin={valid_min}, ValidMax={valid_max}, FillValue={fill_value}")
+            print(f"  总数据点: {ipar_data.size}")
+            print(f"  inf数量: {np.sum(np.isinf(ipar_data))}")
+            print(f"  nan数量: {np.sum(np.isnan(ipar_data))}")
+
+            # 排除inf/nan后统计范围
+            finite_mask = ~(np.isnan(ipar_data) | np.isinf(ipar_data))
+            finite_data = ipar_data[finite_mask]
+            if len(finite_data) > 0:
+                print(f"  有限值数量: {len(finite_data)}")
+                print(f"  有限值范围: [{np.min(finite_data):.4f}, {np.max(finite_data):.4f}]")
+                in_range = np.sum((finite_data >= valid_min) & (finite_data <= valid_max))
+                print(f"  在ValidMin-ValidMax范围内: {in_range}")
+            else:
+                print(f"  有限值数量: 0 (全是inf/nan)")
+
+            # 只清洗inf/nan，不检查ValidMin/ValidMax（因为范围可能不准确）
+            invalid_mask = np.isnan(ipar_data) | np.isinf(ipar_data)
+            invalid_count = np.sum(invalid_mask)
             if invalid_count > 0:
-                print(f"【IPAR数据清洗】发现{invalid_count}个异常值(inf/nan/超范围)，已替换为{fill_value}")
+                print(f"  清洗: 将{invalid_count}个inf/nan替换为{fill_value}")
             ipar_data[invalid_mask] = fill_value
+
+            # 清洗后统计
+            valid_after = np.sum(ipar_data != fill_value)
+            print(f"  清洗后有效值数量: {valid_after}")
+            print(f"{'='*60}\n")
 
             save_data_to_txt(ipar_data,
                                os.path.join(output_dir, f'{prefix}_ipar_{time_str}.txt'))
@@ -363,18 +387,42 @@ def process_hy_data(hy_file_l2a, hy_file_l2b, hy_file_l2c, hy_file_l2t,output_di
             sst_dataset = h5_file['Geophysical Data/SST']
             sst_data = sst_dataset[:].astype(float)
 
-            # 获取有效范围属性 (SST单位通常是开尔文，范围约270-320K)
+            # 获取有效范围属性
             valid_min = sst_dataset.attrs.get('ValidMin', 270.0)
             valid_max = sst_dataset.attrs.get('ValidMax', 320.0)
             fill_value = sst_dataset.attrs.get('_FillValue', -999.0)
 
-            # 清洗数据：将inf/nan和超范围值替换为fill_value
-            invalid_mask = (np.isnan(sst_data) | np.isinf(sst_data) |
-                           (sst_data < valid_min) | (sst_data > valid_max))
-            invalid_count = np.sum(invalid_mask & (sst_data != fill_value))
+            # 【调试】输出数据清洗前的统计
+            print(f"\n{'='*60}")
+            print(f"【SST数据清洗调试】")
+            print(f"{'='*60}")
+            print(f"  ValidMin={valid_min}, ValidMax={valid_max}, FillValue={fill_value}")
+            print(f"  总数据点: {sst_data.size}")
+            print(f"  inf数量: {np.sum(np.isinf(sst_data))}")
+            print(f"  nan数量: {np.sum(np.isnan(sst_data))}")
+
+            # 排除inf/nan后统计范围
+            finite_mask = ~(np.isnan(sst_data) | np.isinf(sst_data))
+            finite_data = sst_data[finite_mask]
+            if len(finite_data) > 0:
+                print(f"  有限值数量: {len(finite_data)}")
+                print(f"  有限值范围: [{np.min(finite_data):.4f}, {np.max(finite_data):.4f}]")
+                in_range = np.sum((finite_data >= valid_min) & (finite_data <= valid_max))
+                print(f"  在ValidMin-ValidMax范围内: {in_range}")
+            else:
+                print(f"  有限值数量: 0 (全是inf/nan)")
+
+            # 只清洗inf/nan，不检查ValidMin/ValidMax（因为范围可能不准确）
+            invalid_mask = np.isnan(sst_data) | np.isinf(sst_data)
+            invalid_count = np.sum(invalid_mask)
             if invalid_count > 0:
-                print(f"【SST数据清洗】发现{invalid_count}个异常值(inf/nan/超范围)，已替换为{fill_value}")
+                print(f"  清洗: 将{invalid_count}个inf/nan替换为{fill_value}")
             sst_data[invalid_mask] = fill_value
+
+            # 清洗后统计
+            valid_after = np.sum(sst_data != fill_value)
+            print(f"  清洗后有效值数量: {valid_after}")
+            print(f"{'='*60}\n")
 
             save_data_to_txt(sst_data,
                                os.path.join(output_dir, f'{prefix}_sst_{time_str}.txt'))
