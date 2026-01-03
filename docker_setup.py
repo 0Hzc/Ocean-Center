@@ -4536,17 +4536,20 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                 rms_val = metrics[source]['rms']
 
                 # 检查nan和inf，替换为"/"
+                # SST、Kd、ipar使用原始单位，Rrs系列使用百分比
+                use_percent = var_name.startswith('Rrs')
+
                 if bias_val is None or np.isnan(bias_val) or np.isinf(bias_val):
                     bias_str = '/'
-                elif var_name == 'sst':
-                    bias_str = f"{bias_val:.4f}{unit}"
-                else:
+                elif use_percent:
                     bias_str = f"{bias_val*100:.2f}%"
+                else:
+                    bias_str = f"{bias_val:.4f}{unit}"
 
                 if rms_val is None or np.isnan(rms_val) or np.isinf(rms_val):
                     rms_str = '/'
-                elif var_name == 'sst':
-                    rms_str = f"{rms_val:.4f}{unit}"
+                elif use_percent:
+                    rms_str = f"{rms_val*100:.2f}%"
                 else:
                     rms_str = f"{rms_val:.4f}{unit}"
 
