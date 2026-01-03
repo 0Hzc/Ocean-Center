@@ -4603,8 +4603,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
             replacements['text'].update({
                 '{{satellite_type}}': satellite_type,
-                '{{source_type}}': ', '.join(config['sources']),
-                '{{unit}}': config['unit']
+                '{{source_type}}': ', '.join(config['sources'])
             })
             replacements['tables'][f'{{{{val_results_{var_name}}}}}'] = val_results
             replacements['tables'][f'{{{{col_results_{var_name}}}}}'] = col_results

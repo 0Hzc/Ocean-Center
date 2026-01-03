@@ -119,11 +119,15 @@ VAR_CONFIGS = {
         'Rrs490': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
         'Rrs520': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
         'Rrs565': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
+        'Rrs620': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
+        'Rrs665': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
         'Rrs670': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
+        'Rrs681': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
         'Rrs750': {'sources': ['HY1E'], 'unit': 'sr⁻¹'},
         'AOT': {'sources': ['HY1E'], 'unit': ''},
         'TSM': {'sources': ['HY1E'], 'unit': 'mg/L'},
         'CDOM': {'sources': ['HY1E'], 'unit': '1/m'},
+        'Kd': {'sources': ['HY1E'], 'unit': 'm⁻¹'},
         'IPAR': {'sources': ['HY1E'], 'unit': 'Einstein/m²/d'},
     },
     'XC': {
@@ -142,10 +146,14 @@ PRODUCT_NAMES = {
     'Rrs490': '490nm遥感反射率',
     'Rrs520': '520nm遥感反射率',
     'Rrs565': '565nm遥感反射率',
+    'Rrs620': '620nm遥感反射率',
+    'Rrs665': '665nm遥感反射率',
     'Rrs670': '670nm遥感反射率',
+    'Rrs681': '681nm遥感反射率',
     'Rrs750': '750nm遥感反射率',
     'TSM': '总悬浮物浓度',
     'CDOM': '有色溶解有机物吸收系数',
+    'Kd': '漫射衰减系数',
     'IPAR': '光合有效辐射'
 }
 
