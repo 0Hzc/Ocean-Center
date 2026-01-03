@@ -2549,7 +2549,11 @@ def step7(input_dir, output_dir):
                         shading='auto')
         
         cbar = plt.colorbar(im, orientation='vertical', pad=0.05)
-        cbar.set_label('Error (%)')
+        # 根据产品类型设置colorbar标签
+        if 'sst' in product_type:
+            cbar.set_label('Error (K)')
+        else:
+            cbar.set_label('Error (%)')
         
         plt.title(title)
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -4393,8 +4397,8 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         'Rrs665': {'sources': ['TERRA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'Rrs681': {'sources': ['TERRA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'AOT': {'sources': ['TERRA'], 'unit': '', 'col_values': [25, 1800]},
-        'Kd': {'sources': ['TERRA'], 'unit': '', 'col_values': [25, 1800]},
-        'ipar': {'sources': ['TERRA'], 'unit': '', 'col_values': [25, 1800]},
+        'Kd': {'sources': ['TERRA'], 'unit': 'm⁻¹', 'col_values': [25, 1800]},
+        'ipar': {'sources': ['TERRA'], 'unit': 'Einstein/m²/d', 'col_values': [25, 1800]},
     }
 
     # 定义SNPP_VAR_CONFIG
@@ -4647,8 +4651,11 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                         # 清空当前行的数据
                         for c in row.cells:
                             c.text = ""
-                        # 填充新数据到单元格
+                        # 填充新数据到单元格（确保不超出表格列数）
+                        num_cells = len(row.cells)
                         for i, value in enumerate(table_data[0]):  # 只取第一个子列表的数据
+                            if i >= num_cells:
+                                break  # 防止索引越界
                             cell = row.cells[i]
                             cell.text = str(value)
                             # 设置水平居中

@@ -912,7 +912,11 @@ class TemplateFiller:
                     if placeholder in cell.text:
                         for c in row.cells:
                             c.text = ""
+                        # 确保不超出表格列数
+                        num_cells = len(row.cells)
                         for i, value in enumerate(table_data[0]):
+                            if i >= num_cells:
+                                break  # 防止索引越界
                             cell = row.cells[i]
                             cell.text = str(value)
                             for paragraph in cell.paragraphs:
