@@ -1012,7 +1012,16 @@ def satellite_flag_create(input_dir, satellite_type,window_size):
     try:
         print(f"开始执行{satellite_type}_flag_create函数")
         flag_matrices = {}
-        
+
+        # 读取数据维度
+        rows, cols = None, None
+        dimension_files = glob.glob(os.path.join(input_dir, 'dimensions_*.txt'))
+        if dimension_files:
+            with open(dimension_files[0], 'r') as f:
+                dims = f.read().strip().split(',')
+                rows, cols = int(dims[0]), int(dims[1])
+                print(f"从维度文件读取到数据维度: {rows} x {cols}")
+
         # 检查目录中的文件
         all_files = os.listdir(input_dir)       
         # 处理所有相关flag文件
