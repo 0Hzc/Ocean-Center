@@ -128,7 +128,7 @@ VAR_CONFIGS = {
         'TSM': {'sources': ['HY1E'], 'unit': 'mg/L'},
         'CDOM': {'sources': ['HY1E'], 'unit': '1/m'},
         'Kd': {'sources': ['HY1E'], 'unit': 'm⁻¹'},
-        'IPAR': {'sources': ['HY1E'], 'unit': 'Einstein/m²/d'},
+        'IPAR': {'sources': ['HY1E'], 'unit': 'Einstein m⁻² s⁻¹'},
     },
     'XC': {
         'sst': {'sources': ['XC'], 'unit': 'K'},

@@ -4398,7 +4398,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         'Rrs681': {'sources': ['TERRA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'AOT': {'sources': ['TERRA'], 'unit': '', 'col_values': [25, 1800]},
         'Kd': {'sources': ['TERRA'], 'unit': 'm⁻¹', 'col_values': [25, 1800]},
-        'ipar': {'sources': ['TERRA'], 'unit': 'Einstein/m²/d', 'col_values': [25, 1800]},
+        'ipar': {'sources': ['TERRA'], 'unit': 'Einstein m⁻² s⁻¹', 'col_values': [25, 1800]},
     }
 
     # 定义SNPP_VAR_CONFIG
