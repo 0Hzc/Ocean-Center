@@ -474,14 +474,21 @@ def HY1E_flag_create(input_dir,window_size):
                 # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
 
                 # 应用空间窗口1（使用实际维度）
-                if rows is None or cols is None:
-                    total_size = flag_matrix.size
+                # 检查维度是否与实际数据大小匹配
+                total_size = flag_matrix.size
+                if rows is None or cols is None or (rows * cols != total_size):
+                    if rows is not None and cols is not None:
+                        print(f"警告：维度文件的维度({rows}x{cols}={rows*cols})与数据大小({total_size})不匹配")
+                    rows, cols = None, None
                     for i in range(1000, 6000):
                         if total_size % i == 0:
                             rows = i
                             cols = total_size // i
                             break
-                    print(f"警告：未找到维度文件，猜测的数据维度: {rows} x {cols}")
+                    if rows is not None:
+                        print(f"根据数据实际大小猜测维度: {rows} x {cols}")
+                    else:
+                        print(f"错误：无法确定数据维度")
                 FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
 
                 # print(f"\n应用空间窗口后的FLAG统计:")
@@ -652,14 +659,21 @@ def HY_flag_create(satellite_type,input_dir,window_size):
                 # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
 
                 # 应用空间窗口1（使用实际维度）
-                if rows is None or cols is None:
-                    total_size = flag_matrix.size
+                # 检查维度是否与实际数据大小匹配
+                total_size = flag_matrix.size
+                if rows is None or cols is None or (rows * cols != total_size):
+                    if rows is not None and cols is not None:
+                        print(f"警告：维度文件的维度({rows}x{cols}={rows*cols})与数据大小({total_size})不匹配")
+                    rows, cols = None, None
                     for i in range(1000, 6000):
                         if total_size % i == 0:
                             rows = i
                             cols = total_size // i
                             break
-                    print(f"警告：未找到维度文件，猜测的数据维度: {rows} x {cols}")
+                    if rows is not None:
+                        print(f"根据数据实际大小猜测维度: {rows} x {cols}")
+                    else:
+                        print(f"错误：无法确定数据维度")
                 FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
 
                 # print(f"\n应用空间窗口后的FLAG统计:")
