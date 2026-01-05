@@ -4398,7 +4398,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         'Rrs681': {'sources': ['TERRA'], 'unit': 'sr⁻¹', 'col_values': [25, 1800]},
         'AOT': {'sources': ['TERRA'], 'unit': '', 'col_values': [25, 1800]},
         'Kd': {'sources': ['TERRA'], 'unit': 'm⁻¹', 'col_values': [25, 1800]},
-        'ipar': {'sources': ['TERRA'], 'unit': 'Einstein/m²/d', 'col_values': [25, 1800]},
+        'ipar': {'sources': ['TERRA'], 'unit': 'Einstein/m²/s', 'col_values': [25, 1800]},
     }
 
     # 定义SNPP_VAR_CONFIG
@@ -4536,6 +4536,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
                 rms_val = metrics[source]['rms']
 
                 # 检查nan和inf，替换为"/"
+                # 平均偏差统一使用百分比，均方根误差使用原始单位（SST除外，SST都用K）
                 if bias_val is None or np.isnan(bias_val) or np.isinf(bias_val):
                     bias_str = '/'
                 elif var_name == 'sst':
@@ -4545,8 +4546,6 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
 
                 if rms_val is None or np.isnan(rms_val) or np.isinf(rms_val):
                     rms_str = '/'
-                elif var_name == 'sst':
-                    rms_str = f"{rms_val:.4f}{unit}"
                 else:
                     rms_str = f"{rms_val:.4f}{unit}"
 

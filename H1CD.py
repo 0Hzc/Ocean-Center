@@ -4002,7 +4002,7 @@ def step_report(datestr, input_temp, input_img, coldata_path, output_path, satel
         'AOT': {'sources': ['HY1E'], 'unit': '', 'col_values': [25, 1800]},
         'TSM': {'sources': ['HY1E'], 'unit': 'mg/L', 'col_values': [25, 1800]},
         'CDOM': {'sources': ['HY1E'], 'unit': '1/m', 'col_values': [25, 1800]},
-        'IPAR': {'sources': ['HY1E'], 'unit': 'Einstein/m²/d', 'col_values': [25, 1800]},
+        'IPAR': {'sources': ['HY1E'], 'unit': 'Einstein/m²/s', 'col_values': [25, 1800]},
     }
 
     # 初始化VAR_CONFIG
