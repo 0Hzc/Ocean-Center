@@ -1093,14 +1093,15 @@ def satellite_flag_create(input_dir, satellite_type,window_size):
         print(f"开始执行{satellite_type}_flag_create函数")
         flag_matrices = {}
 
-        # 读取数据维度
+        # 读取数据维度 - 优先查找卫星特定的维度文件
         rows, cols = None, None
-        dimension_files = glob.glob(os.path.join(input_dir, 'dimensions_*.txt'))
-        if dimension_files:
-            with open(dimension_files[0], 'r') as f:
+        # 首先查找卫星特定的维度文件
+        satellite_dim_files = glob.glob(os.path.join(input_dir, f'dimensions_{satellite_type}_*.txt'))
+        if satellite_dim_files:
+            with open(satellite_dim_files[0], 'r') as f:
                 dims = f.read().strip().split(',')
                 rows, cols = int(dims[0]), int(dims[1])
-                print(f"从维度文件读取到数据维度: {rows} x {cols}")
+                print(f"从{satellite_type}专属维度文件读取到数据维度: {rows} x {cols}")
 
         # 检查目录中的文件
         all_files = os.listdir(input_dir)       

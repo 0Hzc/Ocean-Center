@@ -493,8 +493,20 @@ def process_satellite_check_data(oc_file, sst_file, output_dir):
             time_str = beijing_time.strftime('%Y%m%d%H%M%S')
             prefix = extract_file_prefix(oc_file)
 
+            # 获取数据维度并保存（从latitude数据获取）
+            lat_data = nc_data['navigation_data']['latitude'][:]
+            data_shape = lat_data.shape
+            rows, cols = data_shape[0], data_shape[1]
+            print(f"检测到{prefix}数据维度: {rows} x {cols}")
+
+            # 保存卫星特定的维度文件
+            dimensions_file = os.path.join(output_dir, f'dimensions_{prefix}_{time_str}.txt')
+            with open(dimensions_file, 'w') as f:
+                f.write(f"{rows},{cols}\n")
+            print(f"{prefix}数据维度已保存到: {dimensions_file}")
+
             # 保存基础数据
-            save_data_to_txt(nc_data['navigation_data']['latitude'][:], 
+            save_data_to_txt(lat_data,
                            os.path.join(output_dir, f'{prefix}_Lat_{time_str}.txt'))
             save_data_to_txt(nc_data['navigation_data']['longitude'][:], 
                            os.path.join(output_dir, f'{prefix}_Lon_{time_str}.txt'))
@@ -1020,14 +1032,15 @@ def satellite_flag_create(input_dir, satellite_type,window_size):
         print(f"开始执行{satellite_type}_flag_create函数")
         flag_matrices = {}
 
-        # 读取数据维度
+        # 读取数据维度 - 优先查找卫星特定的维度文件
         rows, cols = None, None
-        dimension_files = glob.glob(os.path.join(input_dir, 'dimensions_*.txt'))
-        if dimension_files:
-            with open(dimension_files[0], 'r') as f:
+        # 首先查找卫星特定的维度文件
+        satellite_dim_files = glob.glob(os.path.join(input_dir, f'dimensions_{satellite_type}_*.txt'))
+        if satellite_dim_files:
+            with open(satellite_dim_files[0], 'r') as f:
                 dims = f.read().strip().split(',')
                 rows, cols = int(dims[0]), int(dims[1])
-                print(f"从维度文件读取到数据维度: {rows} x {cols}")
+                print(f"从{satellite_type}专属维度文件读取到数据维度: {rows} x {cols}")
 
         # 检查目录中的文件
         all_files = os.listdir(input_dir)       
