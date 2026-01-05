@@ -917,15 +917,6 @@ def HY3A_flag_create(input_dir,window_size):
         print("\n开始执行HY1E_flag_create函数\n")
         flag_matrices = {}
 
-        # 读取数据维度
-        rows, cols = None, None
-        dimension_files = glob.glob(os.path.join(input_dir, 'dimensions_*.txt'))
-        if dimension_files:
-            with open(dimension_files[0], 'r') as f:
-                dims = f.read().strip().split(',')
-                rows, cols = int(dims[0]), int(dims[1])
-                print(f"从维度文件读取到数据维度: {rows} x {cols}")
-
         # 检查目录中的文件
         all_files = os.listdir(input_dir)
       
@@ -990,23 +981,13 @@ def HY3A_flag_create(input_dir,window_size):
                 # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
                 # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
 
-                # 应用空间窗口1（使用实际维度）
-                # 检查维度是否与实际数据大小匹配
+                # 应用空间窗口1 - 直接从数据大小猜测维度
                 total_size = flag_matrix.size
-                if rows is None or cols is None or (rows * cols != total_size):
-                    if rows is not None and cols is not None:
-                        print(f"警告：维度文件的维度({rows}x{cols}={rows*cols})与HY3A数据大小({total_size})不匹配")
-                    # 根据实际数据大小猜测维度
-                    rows, cols = None, None
-                    for i in range(1000, 6000):
-                        if total_size % i == 0:
-                            rows = i
-                            cols = total_size // i
-                            break
-                    if rows is not None:
-                        print(f"根据HY3A数据实际大小猜测维度: {rows} x {cols}")
-                    else:
-                        print(f"错误：无法确定HY3A数据维度")
+                for i in range(1000, 6000):
+                    if total_size % i == 0:
+                        rows = i
+                        cols = total_size // i
+                        break
                 FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
 
                 # print(f"\n应用空间窗口后的FLAG统计:")
@@ -1032,18 +1013,8 @@ def satellite_flag_create(input_dir, satellite_type,window_size):
         print(f"开始执行{satellite_type}_flag_create函数")
         flag_matrices = {}
 
-        # 读取数据维度 - 优先查找卫星特定的维度文件
-        rows, cols = None, None
-        # 首先查找卫星特定的维度文件
-        satellite_dim_files = glob.glob(os.path.join(input_dir, f'dimensions_{satellite_type}_*.txt'))
-        if satellite_dim_files:
-            with open(satellite_dim_files[0], 'r') as f:
-                dims = f.read().strip().split(',')
-                rows, cols = int(dims[0]), int(dims[1])
-                print(f"从{satellite_type}专属维度文件读取到数据维度: {rows} x {cols}")
-
         # 检查目录中的文件
-        all_files = os.listdir(input_dir)       
+        all_files = os.listdir(input_dir)
         # 处理所有相关flag文件
         for filename in all_files:
             if filename.startswith(f'{satellite_type}_flag_') and filename.endswith('.txt'):
@@ -1108,23 +1079,13 @@ def satellite_flag_create(input_dir, satellite_type,window_size):
                 # print(f"\n应用空间窗口前的FLAG统计:")
                 # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
                 # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
-                # 应用空间窗口1（使用实际维度）
-                # 检查维度是否与实际数据大小匹配
+                # 应用空间窗口1 - 直接从数据大小猜测维度
                 total_size = flag_matrix.size
-                if rows is None or cols is None or (rows * cols != total_size):
-                    if rows is not None and cols is not None:
-                        print(f"警告：维度文件的维度({rows}x{cols}={rows*cols})与{satellite_type}数据大小({total_size})不匹配")
-                    # 根据实际数据大小猜测维度
-                    rows, cols = None, None
-                    for i in range(1000, 6000):
-                        if total_size % i == 0:
-                            rows = i
-                            cols = total_size // i
-                            break
-                    if rows is not None:
-                        print(f"根据{satellite_type}数据实际大小猜测维度: {rows} x {cols}")
-                    else:
-                        print(f"错误：无法确定{satellite_type}数据维度")
+                for i in range(1000, 6000):
+                    if total_size % i == 0:
+                        rows = i
+                        cols = total_size // i
+                        break
                 FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
 
                 # print(f"\n应用空间窗口后的FLAG统计:")
