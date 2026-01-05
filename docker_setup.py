@@ -293,7 +293,7 @@ def process_hy_data(hy_file_l2a, hy_file_l2b, hy_file_l2c, hy_file_l2t,output_di
             # year = int(h5_file['Scan Line Attributes/year'][0])
             # day = int(h5_file['Scan Line Attributes/day'][0])
             # millisecond = int(h5_file['Scan Line Attributes/msec'][0])
-            
+
             # # 转换为北京时间
             # utc_time = datetime(year, 1, 1) + timedelta(days=day-1, milliseconds=millisecond)
             # beijing_time = utc_time + timedelta(hours=8)
@@ -301,8 +301,20 @@ def process_hy_data(hy_file_l2a, hy_file_l2b, hy_file_l2c, hy_file_l2t,output_di
             date_str = extract_datetime(hy_file_l2a)
             time_str = date_str.strftime("%Y%m%d%H%M%S")
 
+            # 获取数据维度并保存
+            lat_data = h5_file['Navigation Data/Latitude'][:]
+            data_shape = lat_data.shape
+            rows, cols = data_shape[0], data_shape[1]
+            print(f"检测到数据维度: {rows} x {cols}")
+
+            # 保存维度信息到文件,供后续步骤使用
+            dimensions_file = os.path.join(output_dir, f'dimensions_{time_str}.txt')
+            with open(dimensions_file, 'w') as f:
+                f.write(f"{rows},{cols}\n")
+            print(f"数据维度已保存到: {dimensions_file}")
+
             # 保存基础数据
-            save_data_to_txt(h5_file['Navigation Data/Latitude'][:], 
+            save_data_to_txt(lat_data,
                            os.path.join(output_dir, f'{prefix}_lat_{time_str}.txt'))
             save_data_to_txt(h5_file['Navigation Data/Longitude'][:], 
                            os.path.join(output_dir, f'{prefix}_lon_{time_str}.txt'))
@@ -892,7 +904,16 @@ def HY3A_flag_create(input_dir,window_size):
     try:
         print("\n开始执行HY1E_flag_create函数\n")
         flag_matrices = {}
-        
+
+        # 读取数据维度
+        rows, cols = None, None
+        dimension_files = glob.glob(os.path.join(input_dir, 'dimensions_*.txt'))
+        if dimension_files:
+            with open(dimension_files[0], 'r') as f:
+                dims = f.read().strip().split(',')
+                rows, cols = int(dims[0]), int(dims[1])
+                print(f"从维度文件读取到数据维度: {rows} x {cols}")
+
         # 检查目录中的文件
         all_files = os.listdir(input_dir)
       
@@ -956,14 +977,17 @@ def HY3A_flag_create(input_dir,window_size):
                 # print(f"\n应用空间窗口前的FLAG统计:")
                 # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
                 # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
-                
-                # 应用空间窗口1
-                total_size = flag_matrix.size
-                for i in range(1000, 6000):
-                    if total_size % i == 0:
-                        rows = i
-                        cols = total_size // i
-                        break
+
+                # 应用空间窗口1（使用实际维度）
+                if rows is None or cols is None:
+                    # 如果没有维度文件，尝试猜测维度
+                    total_size = flag_matrix.size
+                    for i in range(1000, 6000):
+                        if total_size % i == 0:
+                            rows = i
+                            cols = total_size // i
+                            break
+                    print(f"警告：未找到维度文件，猜测的数据维度: {rows} x {cols}")
                 FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
 
                 # print(f"\n应用空间窗口后的FLAG统计:")
@@ -1055,13 +1079,15 @@ def satellite_flag_create(input_dir, satellite_type,window_size):
                 # print(f"\n应用空间窗口前的FLAG统计:")
                 # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
                 # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
-                # 应用空间窗口1
-                total_size = flag_matrix.size
-                for i in range(1000, 6000):
-                    if total_size % i == 0:
-                        rows = i
-                        cols = total_size // i
-                        break
+                # 应用空间窗口1（使用实际维度）
+                if rows is None or cols is None:
+                    total_size = flag_matrix.size
+                    for i in range(1000, 6000):
+                        if total_size % i == 0:
+                            rows = i
+                            cols = total_size // i
+                            break
+                    print(f"警告：未找到维度文件，猜测的数据维度: {rows} x {cols}")
                 FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
 
                 # print(f"\n应用空间窗口后的FLAG统计:")
@@ -1628,27 +1654,40 @@ def process_xc_spacematch(input_dir, output_dir, target_sensor, window_size):
     """
     处理现场数据空间匹配
     """
+    # 读取数据维度
+    dim_rows, dim_cols = None, None
+    dimension_files = glob.glob(os.path.join(input_dir, 'dimensions_*.txt'))
+    if dimension_files:
+        with open(dimension_files[0], 'r') as f:
+            dims = f.read().strip().split(',')
+            dim_rows, dim_cols = int(dims[0]), int(dims[1])
+            print(f"从维度文件读取到数据维度: {dim_rows} x {dim_cols}")
+
     def process_single_match(target_file, source_file, time_diff):
         """处理单个匹配对"""
+        nonlocal dim_rows, dim_cols
         try:
             # 提取基本信息
             target_parts = target_file.split('_')
             target_time = target_parts[-1].replace('.txt', '')
-            
+
             # 读取目标数据
             target_data = np.genfromtxt(os.path.join(input_dir, target_file))
             target_lat = np.genfromtxt(os.path.join(input_dir, f"{target_sensor}_lat_{target_time}.txt"))
             target_lon = np.genfromtxt(os.path.join(input_dir, f"{target_sensor}_lon_{target_time}.txt"))
             target_flag = np.genfromtxt(os.path.join(input_dir, f"{target_sensor}_flag1_{target_time}.txt"))
-            
-            # 重塑数据为二维数组
-            total_size = target_data.size
-            for i in range(1000, 6000):
-                if total_size % i == 0:
-                    rows = i
-                    cols = total_size // i
-                    break
-            
+
+            # 重塑数据为二维数组（使用实际维度）
+            rows, cols = dim_rows, dim_cols
+            if rows is None or cols is None:
+                total_size = target_data.size
+                for i in range(1000, 6000):
+                    if total_size % i == 0:
+                        rows = i
+                        cols = total_size // i
+                        break
+                print(f"警告：未找到维度文件，猜测的数据维度: {rows} x {cols}")
+
             target_data = target_data.reshape(rows, cols)
             target_lat = target_lat.reshape(rows, cols)
             target_lon = target_lon.reshape(rows, cols)

@@ -107,7 +107,9 @@ def run_check(config):
         else:
             print(f"❌ 严重警告：找不到字体文件！路径: {font_path}")
             print("请检查 config.ini 中的路径是否与 Linux 实际路径完全一致（注意空格和下划线）。")
-        
+            # 尝试使用备选字体
+            plt.rcParams['font.sans-serif'] = ['WenQuanYi Micro Hei', 'DejaVu Sans']
+
         # 确保输出目录存在
         os.makedirs(output_dir, exist_ok=True)
         
@@ -1084,7 +1086,16 @@ def satellite_flag_create(input_dir, satellite_type,window_size):
     try:
         print(f"开始执行{satellite_type}_flag_create函数")
         flag_matrices = {}
-        
+
+        # 读取数据维度
+        rows, cols = None, None
+        dimension_files = glob.glob(os.path.join(input_dir, 'dimensions_*.txt'))
+        if dimension_files:
+            with open(dimension_files[0], 'r') as f:
+                dims = f.read().strip().split(',')
+                rows, cols = int(dims[0]), int(dims[1])
+                print(f"从维度文件读取到数据维度: {rows} x {cols}")
+
         # 检查目录中的文件
         all_files = os.listdir(input_dir)       
         # 处理所有相关flag文件
@@ -1151,13 +1162,15 @@ def satellite_flag_create(input_dir, satellite_type,window_size):
                 # print(f"\n应用空间窗口前的FLAG统计:")
                 # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
                 # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
-                # 应用空间窗口1
-                total_size = flag_matrix.size
-                for i in range(1000, 6000):
-                    if total_size % i == 0:
-                        rows = i
-                        cols = total_size // i
-                        break
+                # 应用空间窗口1（使用实际维度）
+                if rows is None or cols is None:
+                    total_size = flag_matrix.size
+                    for i in range(1000, 6000):
+                        if total_size % i == 0:
+                            rows = i
+                            cols = total_size // i
+                            break
+                    print(f"警告：未找到维度文件，猜测的数据维度: {rows} x {cols}")
                 FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
 
                 # print(f"\n应用空间窗口后的FLAG统计:")
@@ -1707,8 +1720,18 @@ def process_xc_spacematch(input_dir, output_dir, target_sensor, window_size):
     """
     处理现场数据空间匹配
     """
+    # 读取数据维度
+    dim_rows, dim_cols = None, None
+    dimension_files = glob.glob(os.path.join(input_dir, 'dimensions_*.txt'))
+    if dimension_files:
+        with open(dimension_files[0], 'r') as f:
+            dims = f.read().strip().split(',')
+            dim_rows, dim_cols = int(dims[0]), int(dims[1])
+            print(f"从维度文件读取到数据维度: {dim_rows} x {dim_cols}")
+
     def process_single_match(target_file, source_file, time_diff):
         """处理单个匹配对"""
+        nonlocal dim_rows, dim_cols
         try:
             # 提取基本信息
             target_parts = target_file.split('_')
@@ -1720,15 +1743,18 @@ def process_xc_spacematch(input_dir, output_dir, target_sensor, window_size):
             target_lat = np.genfromtxt(os.path.join(input_dir, f"{target_sensor}_lat_{target_time}.txt"))
             target_lon = np.genfromtxt(os.path.join(input_dir, f"{target_sensor}_lon_{target_time}.txt"))
             target_flag = np.genfromtxt(os.path.join(input_dir, flag_file_name))
-            
-            # 重塑数据为二维数组
-            total_size = target_data.size
-            for i in range(1000, 6000):
-                if total_size % i == 0:
-                    rows = i
-                    cols = total_size // i
-                    break
-            
+
+            # 重塑数据为二维数组（使用实际维度）
+            rows, cols = dim_rows, dim_cols
+            if rows is None or cols is None:
+                total_size = target_data.size
+                for i in range(1000, 6000):
+                    if total_size % i == 0:
+                        rows = i
+                        cols = total_size // i
+                        break
+                print(f"警告：未找到维度文件，猜测的数据维度: {rows} x {cols}")
+
             target_data = target_data.reshape(rows, cols)
             target_lat = target_lat.reshape(rows, cols)
             target_lon = target_lon.reshape(rows, cols)
