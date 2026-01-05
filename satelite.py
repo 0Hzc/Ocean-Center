@@ -119,6 +119,8 @@ def run_check(config):
         else:
             print(f"❌ 严重警告：找不到字体文件！路径: {font_path}")
             print("请检查 config.ini 中的路径是否与 Linux 实际路径完全一致（注意空格和下划线）。")
+            # 尝试使用备选字体
+            plt.rcParams['font.sans-serif'] = ['WenQuanYi Micro Hei', 'DejaVu Sans']
 
         # 确保输出目录存在
         os.makedirs(output_dir, exist_ok=True)
@@ -397,7 +399,16 @@ def HY1E_flag_create(input_dir,window_size):
     try:
         print("\n开始执行HY1E_flag_create函数\n")
         flag_matrices = {}
-        
+
+        # 读取数据维度
+        rows, cols = None, None
+        dimension_files = glob.glob(os.path.join(input_dir, 'dimensions_*.txt'))
+        if dimension_files:
+            with open(dimension_files[0], 'r') as f:
+                dims = f.read().strip().split(',')
+                rows, cols = int(dims[0]), int(dims[1])
+                print(f"从维度文件读取到数据维度: {rows} x {cols}")
+
         # 检查目录中的文件
         all_files = os.listdir(input_dir)
       
@@ -461,14 +472,16 @@ def HY1E_flag_create(input_dir,window_size):
                 # print(f"\n应用空间窗口前的FLAG统计:")
                 # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
                 # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
-                
-                # 应用空间窗口1
-                total_size = flag_matrix.size
-                for i in range(1000, 6000):
-                    if total_size % i == 0:
-                        rows = i
-                        cols = total_size // i
-                        break
+
+                # 应用空间窗口1（使用实际维度）
+                if rows is None or cols is None:
+                    total_size = flag_matrix.size
+                    for i in range(1000, 6000):
+                        if total_size % i == 0:
+                            rows = i
+                            cols = total_size // i
+                            break
+                    print(f"警告：未找到维度文件，猜测的数据维度: {rows} x {cols}")
                 FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
 
                 # print(f"\n应用空间窗口后的FLAG统计:")
@@ -564,7 +577,16 @@ def HY_flag_create(satellite_type,input_dir,window_size):
     try:
         print(f"\n开始执行{satellite_type}_flag_create函数\n")
         flag_matrices = {}
-        
+
+        # 读取数据维度
+        rows, cols = None, None
+        dimension_files = glob.glob(os.path.join(input_dir, 'dimensions_*.txt'))
+        if dimension_files:
+            with open(dimension_files[0], 'r') as f:
+                dims = f.read().strip().split(',')
+                rows, cols = int(dims[0]), int(dims[1])
+                print(f"从维度文件读取到数据维度: {rows} x {cols}")
+
         # 检查目录中的文件
         all_files = os.listdir(input_dir)
       
@@ -628,14 +650,16 @@ def HY_flag_create(satellite_type,input_dir,window_size):
                 # print(f"\n应用空间窗口前的FLAG统计:")
                 # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
                 # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
-                
-                # 应用空间窗口1
-                total_size = flag_matrix.size
-                for i in range(1000, 6000):
-                    if total_size % i == 0:
-                        rows = i
-                        cols = total_size // i
-                        break
+
+                # 应用空间窗口1（使用实际维度）
+                if rows is None or cols is None:
+                    total_size = flag_matrix.size
+                    for i in range(1000, 6000):
+                        if total_size % i == 0:
+                            rows = i
+                            cols = total_size // i
+                            break
+                    print(f"警告：未找到维度文件，猜测的数据维度: {rows} x {cols}")
                 FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
 
                 # print(f"\n应用空间窗口后的FLAG统计:")
