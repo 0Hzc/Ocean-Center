@@ -1,5 +1,6 @@
 import os
 import glob
+import gc
 import configparser
 import h5py
 import netCDF4 as nc
@@ -1629,26 +1630,47 @@ def process_satellite_spacematch(input_dir, output_dir, target_sensor, source_ty
                 print("警告：没有有效的源数据点进行插值")
                 return False
                 
+            # 提取有效数据点用于插值
+            valid_source_lon = source_lon[valid]
+            valid_source_lat = source_lat[valid]
+            valid_source_data = source_data[valid]
+
+            # 释放不再需要的大数组
+            del source_lon, source_lat, source_data, source_flag, valid
+            gc.collect()
+
             interpolated_data = interpolate.griddata(
-                points=(source_lon[valid], source_lat[valid]),
-                values=source_data[valid],
+                points=(valid_source_lon, valid_source_lat),
+                values=valid_source_data,
                 xi=(target_lon, target_lat),
                 method='linear',
                 fill_value=np.nan
             )
-            
+
+            # 释放插值源数据
+            del valid_source_lon, valid_source_lat, valid_source_data
+            gc.collect()
+
             # 更新标识
             mask = (target_flag == 1) | (np.isnan(interpolated_data))
             interpolated_data[mask] = np.nan
             target_flag[mask] = 1
-            
+
+            # 释放不再需要的数组
+            del target_lon, target_lat, mask
+            gc.collect()
+
             # 保存结果
             interpolated_filename = f"{naming_rule['output_prefix']}_{param_type}_{source_time}.txt"
             flag_filename = f"{target_sensor}_flag1_{param_type}_{target_time}.txt"
             result_filename = f"spaceresult_{target_sensor}_{source_type}_{param_type}_{target_time}.txt"
-            
+
             np.savetxt(os.path.join(output_dir, interpolated_filename), interpolated_data, fmt='%.6f')
             np.savetxt(os.path.join(output_dir, flag_filename), target_flag, fmt='%d')
+
+            # 释放结果数组
+            del interpolated_data, target_flag
+            gc.collect()
             
             with open(os.path.join(output_dir, result_filename), 'w') as f:
                 f.write(f"{target_file}\n")

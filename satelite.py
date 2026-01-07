@@ -6,6 +6,7 @@ import netCDF4 as nc
 import numpy as np
 import pandas as pd
 import traceback
+import gc
 from datetime import datetime, timedelta
 from scipy import interpolate
 import re
@@ -938,16 +939,30 @@ def process_satellite_spacematch(input_dir, output_dir, target_sensor, source_ty
             if not np.any(valid):
                 print("警告：没有有效的源数据点进行插值")
                 return False
-                
+
+            # 提取有效数据点用于插值
+            valid_source_lon = source_lon[valid]
+            valid_source_lat = source_lat[valid]
+            valid_source_data = source_data[valid]
+
+            # 释放不再需要的大数组
+            del source_lon, source_lat, source_data, source_flag, valid
+            gc.collect()
+
             interpolated_data = interpolate.griddata(
-                points=(source_lon[valid], source_lat[valid]),
-                values=source_data[valid],
+                points=(valid_source_lon, valid_source_lat),
+                values=valid_source_data,
                 xi=(target_lon, target_lat),
                 method='linear',
                 fill_value=np.nan
             )
-            
-            # 更新标识
+
+            # 释放插值源数据
+            del valid_source_lon, valid_source_lat, valid_source_data
+            gc.collect()
+
+            # 更新标识 - 重新读取target_flag
+            target_flag = np.genfromtxt(os.path.join(input_dir, f"{target_sensor}_flag1_{target_time}.txt"))
             mask = (target_flag == 1) | (np.isnan(interpolated_data))
             interpolated_data[mask] = np.nan
             target_flag[mask] = 1
