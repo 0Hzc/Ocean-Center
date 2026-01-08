@@ -1,5 +1,6 @@
 import os
 import glob
+import gc
 import configparser
 import h5py
 import netCDF4 as nc
@@ -917,6 +918,15 @@ def HY3A_flag_create(input_dir,window_size):
         print("\n开始执行HY1E_flag_create函数\n")
         flag_matrices = {}
 
+        # 读取数据维度
+        rows, cols = None, None
+        dimension_files = glob.glob(os.path.join(input_dir, 'dimensions_*.txt'))
+        if dimension_files:
+            with open(dimension_files[0], 'r') as f:
+                dims = f.read().strip().split(',')
+                rows, cols = int(dims[0]), int(dims[1])
+                print(f"从维度文件读取到数据维度: {rows} x {cols}")
+
         # 检查目录中的文件
         all_files = os.listdir(input_dir)
       
@@ -981,13 +991,23 @@ def HY3A_flag_create(input_dir,window_size):
                 # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
                 # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
 
-                # 应用空间窗口1 - 直接从数据大小猜测维度
+                # 应用空间窗口1（使用实际维度）
+                # 检查维度是否与实际数据大小匹配
                 total_size = flag_matrix.size
-                for i in range(1000, 6000):
-                    if total_size % i == 0:
-                        rows = i
-                        cols = total_size // i
-                        break
+                if rows is None or cols is None or (rows * cols != total_size):
+                    if rows is not None and cols is not None:
+                        print(f"警告：维度文件的维度({rows}x{cols}={rows*cols})与HY3A数据大小({total_size})不匹配")
+                    # 根据实际数据大小猜测维度
+                    rows, cols = None, None
+                    for i in range(1000, 6000):
+                        if total_size % i == 0:
+                            rows = i
+                            cols = total_size // i
+                            break
+                    if rows is not None:
+                        print(f"根据HY3A数据实际大小猜测维度: {rows} x {cols}")
+                    else:
+                        print(f"错误：无法确定HY3A数据维度")
                 FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
 
                 # print(f"\n应用空间窗口后的FLAG统计:")
@@ -1013,8 +1033,18 @@ def satellite_flag_create(input_dir, satellite_type,window_size):
         print(f"开始执行{satellite_type}_flag_create函数")
         flag_matrices = {}
 
+        # 读取数据维度 - 优先查找卫星特定的维度文件
+        rows, cols = None, None
+        # 首先查找卫星特定的维度文件
+        satellite_dim_files = glob.glob(os.path.join(input_dir, f'dimensions_{satellite_type}_*.txt'))
+        if satellite_dim_files:
+            with open(satellite_dim_files[0], 'r') as f:
+                dims = f.read().strip().split(',')
+                rows, cols = int(dims[0]), int(dims[1])
+                print(f"从{satellite_type}专属维度文件读取到数据维度: {rows} x {cols}")
+
         # 检查目录中的文件
-        all_files = os.listdir(input_dir)
+        all_files = os.listdir(input_dir)       
         # 处理所有相关flag文件
         for filename in all_files:
             if filename.startswith(f'{satellite_type}_flag_') and filename.endswith('.txt'):
@@ -1079,13 +1109,23 @@ def satellite_flag_create(input_dir, satellite_type,window_size):
                 # print(f"\n应用空间窗口前的FLAG统计:")
                 # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
                 # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
-                # 应用空间窗口1 - 直接从数据大小猜测维度
+                # 应用空间窗口1（使用实际维度）
+                # 检查维度是否与实际数据大小匹配
                 total_size = flag_matrix.size
-                for i in range(1000, 6000):
-                    if total_size % i == 0:
-                        rows = i
-                        cols = total_size // i
-                        break
+                if rows is None or cols is None or (rows * cols != total_size):
+                    if rows is not None and cols is not None:
+                        print(f"警告：维度文件的维度({rows}x{cols}={rows*cols})与{satellite_type}数据大小({total_size})不匹配")
+                    # 根据实际数据大小猜测维度
+                    rows, cols = None, None
+                    for i in range(1000, 6000):
+                        if total_size % i == 0:
+                            rows = i
+                            cols = total_size // i
+                            break
+                    if rows is not None:
+                        print(f"根据{satellite_type}数据实际大小猜测维度: {rows} x {cols}")
+                    else:
+                        print(f"错误：无法确定{satellite_type}数据维度")
                 FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
 
                 # print(f"\n应用空间窗口后的FLAG统计:")
@@ -1590,26 +1630,47 @@ def process_satellite_spacematch(input_dir, output_dir, target_sensor, source_ty
                 print("警告：没有有效的源数据点进行插值")
                 return False
                 
+            # 提取有效数据点用于插值
+            valid_source_lon = source_lon[valid]
+            valid_source_lat = source_lat[valid]
+            valid_source_data = source_data[valid]
+
+            # 释放不再需要的大数组
+            del source_lon, source_lat, source_data, source_flag, valid
+            gc.collect()
+
             interpolated_data = interpolate.griddata(
-                points=(source_lon[valid], source_lat[valid]),
-                values=source_data[valid],
+                points=(valid_source_lon, valid_source_lat),
+                values=valid_source_data,
                 xi=(target_lon, target_lat),
                 method='linear',
                 fill_value=np.nan
             )
-            
+
+            # 释放插值源数据
+            del valid_source_lon, valid_source_lat, valid_source_data
+            gc.collect()
+
             # 更新标识
             mask = (target_flag == 1) | (np.isnan(interpolated_data))
             interpolated_data[mask] = np.nan
             target_flag[mask] = 1
-            
+
+            # 释放不再需要的数组
+            del target_lon, target_lat, mask
+            gc.collect()
+
             # 保存结果
             interpolated_filename = f"{naming_rule['output_prefix']}_{param_type}_{source_time}.txt"
             flag_filename = f"{target_sensor}_flag1_{param_type}_{target_time}.txt"
             result_filename = f"spaceresult_{target_sensor}_{source_type}_{param_type}_{target_time}.txt"
-            
+
             np.savetxt(os.path.join(output_dir, interpolated_filename), interpolated_data, fmt='%.6f')
             np.savetxt(os.path.join(output_dir, flag_filename), target_flag, fmt='%d')
+
+            # 释放结果数组
+            del interpolated_data, target_flag
+            gc.collect()
             
             with open(os.path.join(output_dir, result_filename), 'w') as f:
                 f.write(f"{target_file}\n")

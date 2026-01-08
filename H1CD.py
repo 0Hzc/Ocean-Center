@@ -6,6 +6,7 @@ import netCDF4 as nc
 import numpy as np
 import pandas as pd
 import traceback
+import gc
 from datetime import datetime, timedelta
 from scipy import interpolate
 import re
@@ -963,6 +964,23 @@ def HY_flag_create(satellite_type,input_dir,window_size):
         # 检查目录中的文件
         all_files = os.listdir(input_dir)
 
+        # 读取数据维度
+        dimension_files = [f for f in all_files if f.startswith('dimensions_')]
+        rows, cols = None, None
+        if dimension_files:
+            dimension_file = os.path.join(input_dir, dimension_files[0])
+            try:
+                with open(dimension_file, 'r') as f:
+                    dims = f.read().strip().split(',')
+                    rows, cols = int(dims[0]), int(dims[1])
+                    print(f"从维度文件读取到数据维度: {rows} x {cols}")
+            except Exception as e:
+                print(f"读取维度文件失败: {e}")
+
+        # 如果没有读取到维度文件,尝试猜测(向后兼容)
+        if rows is None or cols is None:
+            print("警告: 未找到维度文件,将尝试猜测数据维度")
+
         # 查找所有flag文件
         flag_files = [f for f in all_files
                      if f.startswith(f'{satellite_type}_flag_') and f.endswith('.txt')
@@ -980,14 +998,21 @@ def HY_flag_create(satellite_type,input_dir,window_size):
             # 读取原始 l2_flags 数据
             flag_matrix = np.genfromtxt(flag_file, delimiter=None, dtype=np.int32)
 
-            # 从数据大小猜测维度
+            # 如果没有从文件读取到维度或维度不匹配,尝试猜测
             total_size = flag_matrix.size
-            rows, cols = None, None
-            for i in range(1000, 6000):
-                if total_size % i == 0:
-                    rows = i
-                    cols = total_size // i
-                    break
+            if rows is None or cols is None or (rows * cols != total_size):
+                if rows is not None and cols is not None:
+                    print(f"警告：维度文件的维度({rows}x{cols}={rows*cols})与数据大小({total_size})不匹配")
+                rows, cols = None, None
+                for i in range(1000, 6000):
+                    if total_size % i == 0:
+                        rows = i
+                        cols = total_size // i
+                        break
+                if rows is not None:
+                    print(f"根据数据实际大小猜测维度: {rows} x {cols}")
+                else:
+                    print(f"错误：无法确定数据维度")
 
             # 重塑为二维数组
             flag_matrix = flag_matrix.reshape(rows, cols) if flag_matrix.ndim == 1 else flag_matrix
@@ -1069,8 +1094,18 @@ def satellite_flag_create(input_dir, satellite_type,window_size):
         print(f"开始执行{satellite_type}_flag_create函数")
         flag_matrices = {}
 
+        # 读取数据维度 - 优先查找卫星特定的维度文件
+        rows, cols = None, None
+        # 首先查找卫星特定的维度文件
+        satellite_dim_files = glob.glob(os.path.join(input_dir, f'dimensions_{satellite_type}_*.txt'))
+        if satellite_dim_files:
+            with open(satellite_dim_files[0], 'r') as f:
+                dims = f.read().strip().split(',')
+                rows, cols = int(dims[0]), int(dims[1])
+                print(f"从{satellite_type}专属维度文件读取到数据维度: {rows} x {cols}")
+
         # 检查目录中的文件
-        all_files = os.listdir(input_dir)
+        all_files = os.listdir(input_dir)       
         # 处理所有相关flag文件
         for filename in all_files:
             if filename.startswith(f'{satellite_type}_flag_') and filename.endswith('.txt'):
@@ -1135,13 +1170,23 @@ def satellite_flag_create(input_dir, satellite_type,window_size):
                 # print(f"\n应用空间窗口前的FLAG统计:")
                 # print(f"- FLAG中1的数量: {np.sum(FLAG == 1)}")
                 # print(f"- FLAG中0的数量: {np.sum(FLAG == 0)}")
-                # 应用空间窗口1 - 直接从数据大小猜测维度
+                # 应用空间窗口1（使用实际维度）
+                # 检查维度是否与实际数据大小匹配
                 total_size = flag_matrix.size
-                for i in range(1000, 6000):
-                    if total_size % i == 0:
-                        rows = i
-                        cols = total_size // i
-                        break
+                if rows is None or cols is None or (rows * cols != total_size):
+                    if rows is not None and cols is not None:
+                        print(f"警告：维度文件的维度({rows}x{cols}={rows*cols})与{satellite_type}数据大小({total_size})不匹配")
+                    # 根据实际数据大小猜测维度
+                    rows, cols = None, None
+                    for i in range(1000, 6000):
+                        if total_size % i == 0:
+                            rows = i
+                            cols = total_size // i
+                            break
+                    if rows is not None:
+                        print(f"根据{satellite_type}数据实际大小猜测维度: {rows} x {cols}")
+                    else:
+                        print(f"错误：无法确定{satellite_type}数据维度")
                 FLAG = apply_spatial_window(FLAG, window_size, rows, cols)
 
                 # print(f"\n应用空间窗口后的FLAG统计:")
@@ -1628,16 +1673,30 @@ def process_satellite_spacematch(input_dir, output_dir, target_sensor, source_ty
             if not np.any(valid):
                 print("警告：没有有效的源数据点进行插值")
                 return False
-                
+
+            # 提取有效数据点用于插值
+            valid_source_lon = source_lon[valid]
+            valid_source_lat = source_lat[valid]
+            valid_source_data = source_data[valid]
+
+            # 释放不再需要的大数组
+            del source_lon, source_lat, source_data, source_flag, valid
+            gc.collect()
+
             interpolated_data = interpolate.griddata(
-                points=(source_lon[valid], source_lat[valid]),
-                values=source_data[valid],
+                points=(valid_source_lon, valid_source_lat),
+                values=valid_source_data,
                 xi=(target_lon, target_lat),
                 method='linear',
                 fill_value=np.nan
             )
-            
+
+            # 释放插值源数据
+            del valid_source_lon, valid_source_lat, valid_source_data
+            gc.collect()
+
             # 更新标识
+            target_flag = np.genfromtxt(os.path.join(input_dir, flag_file_name))
             mask = (target_flag == 1) | (np.isnan(interpolated_data))
             interpolated_data[mask] = np.nan
             target_flag[mask] = 1
