@@ -9,7 +9,106 @@ import pandas as pd
 import traceback
 from datetime import datetime, timedelta
 from scipy import interpolate
+from scipy.spatial import cKDTree
 import re
+
+
+def memory_efficient_interpolate(source_lon, source_lat, source_data, target_lon, target_lat, max_points=500000):
+    """
+    内存优化的空间插值函数
+    当源数据点数超过阈值时，使用基于KDTree的加权插值代替griddata
+
+    参数:
+        source_lon, source_lat: 源数据经纬度
+        source_data: 源数据值
+        target_lon, target_lat: 目标经纬度
+        max_points: 最大直接处理的点数，超过则使用KDTree方法
+
+    返回:
+        interpolated_data: 插值结果
+    """
+    n_source = len(source_lon)
+
+    if n_source <= max_points:
+        # 数据量较小，使用标准griddata
+        print(f"  使用标准griddata插值 ({n_source}个源点)")
+        return interpolate.griddata(
+            points=(source_lon, source_lat),
+            values=source_data,
+            xi=(target_lon, target_lat),
+            method='linear',
+            fill_value=np.nan
+        )
+
+    # 数据量大，使用基于KDTree的反距离加权插值
+    print(f"  源数据点数({n_source})较大，使用KDTree反距离加权插值")
+
+    # 转换为float32减少内存
+    source_lon = source_lon.astype(np.float32)
+    source_lat = source_lat.astype(np.float32)
+    source_data = source_data.astype(np.float32)
+
+    # 构建KDTree
+    source_points = np.column_stack([source_lon, source_lat])
+    del source_lon, source_lat
+    gc.collect()
+
+    tree = cKDTree(source_points)
+    del source_points
+    gc.collect()
+
+    # 展平目标坐标
+    target_shape = target_lon.shape
+    target_lon_flat = target_lon.flatten().astype(np.float32)
+    target_lat_flat = target_lat.flatten().astype(np.float32)
+
+    del target_lon, target_lat
+    gc.collect()
+
+    target_points = np.column_stack([target_lon_flat, target_lat_flat])
+    del target_lon_flat, target_lat_flat
+    gc.collect()
+
+    # 分块查询以减少内存峰值
+    n_target = len(target_points)
+    chunk_size = 500000  # 每次处理50万个目标点
+    k_neighbors = 4  # 使用4个最近邻进行插值
+
+    result = np.empty(n_target, dtype=np.float32)
+
+    for i in range(0, n_target, chunk_size):
+        end_idx = min(i + chunk_size, n_target)
+        chunk_points = target_points[i:end_idx]
+
+        # 查找k个最近邻
+        distances, indices = tree.query(chunk_points, k=k_neighbors)
+
+        # 处理距离为0的情况（精确匹配）
+        distances = np.maximum(distances, 1e-10)
+
+        # 反距离加权
+        weights = 1.0 / distances
+        weights_sum = weights.sum(axis=1, keepdims=True)
+        weights = weights / weights_sum
+
+        # 计算加权平均
+        neighbor_values = source_data[indices]
+        chunk_result = np.sum(weights * neighbor_values, axis=1)
+
+        # 如果最近点距离太远，标记为NaN（超过0.5度）
+        min_dist = distances[:, 0]
+        chunk_result[min_dist > 0.5] = np.nan
+
+        result[i:end_idx] = chunk_result
+
+        # 释放临时变量
+        del distances, indices, weights, neighbor_values, chunk_result, chunk_points
+        gc.collect()
+
+    del target_points, tree, source_data
+    gc.collect()
+
+    return result.reshape(target_shape)
 import matplotlib.pyplot as plt
 import random
 from mpl_toolkits.basemap import Basemap
@@ -1631,20 +1730,18 @@ def process_satellite_spacematch(input_dir, output_dir, target_sensor, source_ty
                 return False
                 
             # 提取有效数据点用于插值
-            valid_source_lon = source_lon[valid]
-            valid_source_lat = source_lat[valid]
-            valid_source_data = source_data[valid]
+            valid_source_lon = source_lon[valid].flatten()
+            valid_source_lat = source_lat[valid].flatten()
+            valid_source_data = source_data[valid].flatten()
 
             # 释放不再需要的大数组
             del source_lon, source_lat, source_data, source_flag, valid
             gc.collect()
 
-            interpolated_data = interpolate.griddata(
-                points=(valid_source_lon, valid_source_lat),
-                values=valid_source_data,
-                xi=(target_lon, target_lat),
-                method='linear',
-                fill_value=np.nan
+            # 使用内存优化的插值函数
+            interpolated_data = memory_efficient_interpolate(
+                valid_source_lon, valid_source_lat, valid_source_data,
+                target_lon, target_lat
             )
 
             # 释放插值源数据

@@ -9,11 +9,88 @@ import traceback
 import gc
 from datetime import datetime, timedelta
 from scipy import interpolate
+from scipy.spatial import cKDTree
 import re
 import matplotlib.pyplot as plt
 import random
 from mpl_toolkits.basemap import Basemap
 from scipy.interpolate import griddata
+
+
+def memory_efficient_interpolate(source_lon, source_lat, source_data, target_lon, target_lat, max_points=500000):
+    """
+    内存优化的空间插值函数
+    当源数据点数超过阈值时，使用基于KDTree的加权插值代替griddata
+    """
+    n_source = len(source_lon)
+
+    if n_source <= max_points:
+        print(f"  使用标准griddata插值 ({n_source}个源点)")
+        return interpolate.griddata(
+            points=(source_lon, source_lat),
+            values=source_data,
+            xi=(target_lon, target_lat),
+            method='linear',
+            fill_value=np.nan
+        )
+
+    print(f"  源数据点数({n_source})较大，使用KDTree反距离加权插值")
+
+    source_lon = source_lon.astype(np.float32)
+    source_lat = source_lat.astype(np.float32)
+    source_data = source_data.astype(np.float32)
+
+    source_points = np.column_stack([source_lon, source_lat])
+    del source_lon, source_lat
+    gc.collect()
+
+    tree = cKDTree(source_points)
+    del source_points
+    gc.collect()
+
+    target_shape = target_lon.shape
+    target_lon_flat = target_lon.flatten().astype(np.float32)
+    target_lat_flat = target_lat.flatten().astype(np.float32)
+
+    del target_lon, target_lat
+    gc.collect()
+
+    target_points = np.column_stack([target_lon_flat, target_lat_flat])
+    del target_lon_flat, target_lat_flat
+    gc.collect()
+
+    n_target = len(target_points)
+    chunk_size = 500000
+    k_neighbors = 4
+
+    result = np.empty(n_target, dtype=np.float32)
+
+    for i in range(0, n_target, chunk_size):
+        end_idx = min(i + chunk_size, n_target)
+        chunk_points = target_points[i:end_idx]
+
+        distances, indices = tree.query(chunk_points, k=k_neighbors)
+        distances = np.maximum(distances, 1e-10)
+
+        weights = 1.0 / distances
+        weights_sum = weights.sum(axis=1, keepdims=True)
+        weights = weights / weights_sum
+
+        neighbor_values = source_data[indices]
+        chunk_result = np.sum(weights * neighbor_values, axis=1)
+
+        min_dist = distances[:, 0]
+        chunk_result[min_dist > 0.5] = np.nan
+
+        result[i:end_idx] = chunk_result
+
+        del distances, indices, weights, neighbor_values, chunk_result, chunk_points
+        gc.collect()
+
+    del target_points, tree, source_data
+    gc.collect()
+
+    return result.reshape(target_shape)
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
@@ -1675,24 +1752,26 @@ def process_satellite_spacematch(input_dir, output_dir, target_sensor, source_ty
                 return False
 
             # 提取有效数据点用于插值
-            valid_source_lon = source_lon[valid]
-            valid_source_lat = source_lat[valid]
-            valid_source_data = source_data[valid]
+            valid_source_lon = source_lon[valid].flatten()
+            valid_source_lat = source_lat[valid].flatten()
+            valid_source_data = source_data[valid].flatten()
 
             # 释放不再需要的大数组
             del source_lon, source_lat, source_data, source_flag, valid
             gc.collect()
 
-            interpolated_data = interpolate.griddata(
-                points=(valid_source_lon, valid_source_lat),
-                values=valid_source_data,
-                xi=(target_lon, target_lat),
-                method='linear',
-                fill_value=np.nan
+            # 使用内存优化的插值函数
+            interpolated_data = memory_efficient_interpolate(
+                valid_source_lon, valid_source_lat, valid_source_data,
+                target_lon, target_lat
             )
 
             # 释放插值源数据
             del valid_source_lon, valid_source_lat, valid_source_data
+            gc.collect()
+
+            # 释放目标坐标
+            del target_lon, target_lat
             gc.collect()
 
             # 更新标识
