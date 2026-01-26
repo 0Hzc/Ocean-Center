@@ -13,7 +13,7 @@ from scipy.spatial import cKDTree
 import re
 
 
-def memory_efficient_interpolate(source_lon, source_lat, source_data, target_lon, target_lat, max_points=500000):
+def memory_efficient_interpolate(source_lon, source_lat, source_data, target_lon, target_lat, max_points=50000):
     """
     内存优化的空间插值函数
     当源数据点数超过阈值时，使用基于KDTree的加权插值代替griddata
@@ -28,8 +28,10 @@ def memory_efficient_interpolate(source_lon, source_lat, source_data, target_lon
         interpolated_data: 插值结果
     """
     n_source = len(source_lon)
+    n_target = target_lon.size
 
-    if n_source <= max_points:
+    # 如果源点或目标点数量较大，使用KDTree方法
+    if n_source <= max_points and n_target <= 1000000:
         # 数据量较小，使用标准griddata
         print(f"  使用标准griddata插值 ({n_source}个源点)")
         return interpolate.griddata(
@@ -41,7 +43,7 @@ def memory_efficient_interpolate(source_lon, source_lat, source_data, target_lon
         )
 
     # 数据量大，使用基于KDTree的反距离加权插值
-    print(f"  源数据点数({n_source})较大，使用KDTree反距离加权插值")
+    print(f"  数据量较大(源:{n_source}, 目标:{n_target})，使用KDTree反距离加权插值")
 
     # 转换为float32减少内存
     source_lon = source_lon.astype(np.float32)
