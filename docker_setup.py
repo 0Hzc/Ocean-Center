@@ -236,9 +236,9 @@ def run_check(config):
                 default_lat,
                 default_lon,
                 aopres_file=os.path.join(reference_input_dir, config['XC']['aopres_file']),
-                wqp_file=os.path.join(reference_input_dir, config['XC']['wqp_file']),
+                dcsszcgq_file=os.path.join(reference_input_dir, config['XC']['dcsszcgq_file']),
                 aot_file=os.path.join(reference_input_dir, config['XC']['aot_file']),
-                ctd_file=os.path.join(reference_input_dir, config['XC']['ctd_file']),
+                wycgq_file=os.path.join(reference_input_dir, config['XC']['wycgq_file']),
                 output_dir=output_dir
             )
         else:
@@ -692,7 +692,7 @@ def process_satellite_check_data(oc_file, sst_file, output_dir):
         return False
 
 
-def process_xc_check_data(default_lat,default_lon,aopres_file, wqp_file, aot_file, ctd_file, output_dir):
+def process_xc_check_data(default_lat, default_lon, aopres_file, dcsszcgq_file, aot_file, wycgq_file, output_dir):
     """
     处理现场检验数据
     """
@@ -735,14 +735,14 @@ def process_xc_check_data(default_lat,default_lon,aopres_file, wqp_file, aot_fil
         # 读取数据部分
         df = pd.read_csv(input_file, skiprows=header_end_line, sep=r'\s+', header=None)
         
-        # 根据数据类型处理       
-        if data_type == 'wqp':
-            # 处理水质参数数据
+        # 根据数据类型处理
+        if data_type == 'dcsszcgq':
+            # 处理水质参数数据 (多参数水质传感器)
             if df.shape[1] >= 5:
                 df = df.iloc[:, :5]
-                df.columns = ['Date', 'Time', 'Chl', 'CDOM', 'TSM']
+                df.columns = ['Date', 'Time', 'TSM', 'Chl', 'CDOM']
             else:
-                raise ValueError(f"WQP数据列数不足: {df.shape[1]}")
+                raise ValueError(f"DCSSZCGQ数据列数不足: {df.shape[1]}")
         
         elif data_type == 'aop':
             if df.shape[1] >= 1570:
@@ -763,20 +763,20 @@ def process_xc_check_data(default_lat,default_lon,aopres_file, wqp_file, aot_fil
             else:
                 raise ValueError(f"AOT数据列数不足: {df.shape[1]}")
                 
-        elif data_type == 'ctd':
-            # 处理温度数据
+        elif data_type == 'wycgq':
+            # 处理温盐传感器数据 (温度)
             if df.shape[1] >= 4:
                 df = df.iloc[:, [0, 1, 3]]
                 df.columns = ['Date', 'Time', 'SST']
                 df = df.dropna(subset=['SST'])
             else:
-                raise ValueError(f"SST数据列数不足: {df.shape[1]}")
+                raise ValueError(f"WYCGQ数据列数不足: {df.shape[1]}")
 
         df = df.dropna()
         
         # 保存处理后的数据
         for date, group in df.groupby('Date'):
-            if data_type == 'wqp':
+            if data_type == 'dcsszcgq':
                 # 处理水质参数数据
                 params = [
                     ('Chl', 'Chl'),
@@ -789,7 +789,7 @@ def process_xc_check_data(default_lat,default_lon,aopres_file, wqp_file, aot_fil
                         f.write(f"Latitude: {header_info['lat']}\n")
                         f.write(f"Longitude: {header_info['lon']}\n")
                         f.write("Data:\n")
-                    group[['Date', 'Time', col_name]].to_csv(output_file, mode='a', 
+                    group[['Date', 'Time', col_name]].to_csv(output_file, mode='a',
                                                            index=False, sep='\t')   
             elif data_type == 'aop':
                 #处理遥感反射率数据
@@ -825,7 +825,7 @@ def process_xc_check_data(default_lat,default_lon,aopres_file, wqp_file, aot_fil
                 group[['Date', 'Time', 'AOT', 'Flag']].to_csv(output_file, mode='a', 
                                                             index=False, sep='\t')
                 
-            elif data_type == 'ctd':
+            elif data_type == 'wycgq':
                 #处理温度数据
                 params = [
                     ('sst', 'SST')
@@ -837,7 +837,7 @@ def process_xc_check_data(default_lat,default_lon,aopres_file, wqp_file, aot_fil
                         f.write(f"Longitude: {header_info['lon']}\n")
                         f.write("Data:\n")
                     group[['Date', 'Time', col_name]].to_csv(
-                        output_file, 
+                        output_file,
                         mode='a',
                         index=False,
                         sep='\t'
@@ -849,12 +849,12 @@ def process_xc_check_data(default_lat,default_lon,aopres_file, wqp_file, aot_fil
         # 处理各类数据文件
         if aopres_file:
             process_data_file(aopres_file, 'aop')
-        if wqp_file:
-            process_data_file(wqp_file, 'wqp')
+        if dcsszcgq_file:
+            process_data_file(dcsszcgq_file, 'dcsszcgq')
         if aot_file:
             process_data_file(aot_file, 'aot')
-        if ctd_file:
-            process_data_file(ctd_file, 'ctd')
+        if wycgq_file:
+            process_data_file(wycgq_file, 'wycgq')
             
         print('\n现场检验数据处理完成\n')
         return True
