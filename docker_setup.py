@@ -698,16 +698,16 @@ def process_xc_check_data(default_lat, default_lon, aopres_file, dcsszcgq_file, 
     """
     def read_header_info(file_path):
         """读取文件头信息"""
-        header_info = {'lat':default_lat, 'lon': default_lon}  # 默认值
+        header_info = {'lat': default_lat, 'lon': default_lon}  # 默认值
         header_end_line = 0
-        
+
         with open(file_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
             for i, line in enumerate(lines):
                 line = line.strip()
                 if not line:
                     continue
-                    
+
                 if line.startswith('/north_latitude'):
                     lat_str = line.split('=')[1] if '=' in line else line.split()[1]
                     header_info['lat'] = float(lat_str)
@@ -717,63 +717,205 @@ def process_xc_check_data(default_lat, default_lon, aopres_file, dcsszcgq_file, 
                 elif line.startswith('/end_header'):
                     header_end_line = i + 1
                     break
-        
+
         if header_end_line == 0:
             for i, line in enumerate(lines):
                 if line.strip() and not line.startswith('/'):
                     header_end_line = i
                     break
-                    
+
         return header_info, header_end_line
 
     def process_data_file(input_file, data_type):
         """处理单个数据文件"""
         print(f'\n开始处理{data_type}数据\n')
+
+        # 添加时间格式化辅助函数
+        def format_time_column(time_series):
+            """智能格式化时间列"""
+            # 检查第一个非空值的格式
+            sample = str(time_series.dropna().iloc[0]) if not time_series.dropna().empty else ""
+
+            # 如果已经是6位数字格式（HHMMSS），直接返回
+            if sample.replace('.', '').replace(':', '').isdigit() and len(sample.replace(':', '').replace('.', '')) == 6:
+                # 移除可能的小数点和冒号
+                return time_series.astype(str).str.replace(':', '').str.replace('.', '').str.zfill(6)
+
+            # 如果包含冒号，说明是 HH:MM:SS 格式，需要转换
+            if ':' in sample:
+                return pd.to_datetime(time_series, format='%H:%M:%S').dt.strftime('%H%M%S')
+
+            # 其他情况，尝试补齐到6位
+            return time_series.astype(str).str.zfill(6)
+
         # 读取文件头信息
         header_info, header_end_line = read_header_info(input_file)
-        
+
         # 读取数据部分
         df = pd.read_csv(input_file, skiprows=header_end_line, sep=r'\s+', header=None)
-        
+
         # 根据数据类型处理
         if data_type == 'dcsszcgq':
-            # 处理水质参数数据 (多参数水质传感器)
+            # 处理水质参数数据
             if df.shape[1] >= 5:
                 df = df.iloc[:, :5]
                 df.columns = ['Date', 'Time', 'TSM', 'Chl', 'CDOM']
+
+                # 添加调试输出
+                print(f"\n调试信息 - {data_type}:")
+                print(f"原始日期列样例:\n{df['Date'].head()}")
+                print(f"日期列数据类型: {df['Date'].dtype}")
+
+                # 格式化日期和时间 - 添加错误处理
+                try:
+                    # 先转换为字符串并清理格式
+                    df['Date'] = df['Date'].astype(str).str.replace('-', '').str.replace('/', '').str.replace(' ', '').str.strip()
+                    print(f"清理后日期样例:\n{df['Date'].head()}")
+
+                    # 尝试转换为日期
+                    df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
+
+                    # 统计有效日期
+                    valid_count = df['Date'].notna().sum()
+                    total_count = len(df)
+                    print(f"有效日期数量: {valid_count}/{total_count}")
+
+                    # 移除日期解析失败的行
+                    df = df.dropna(subset=['Date'])
+
+                    if df.empty:
+                        print(f"警告：{data_type} 数据所有日期解析失败，跳过处理")
+                        return
+
+                    # 格式化为 YYYYMMDD
+                    df['Date'] = df['Date'].dt.strftime('%Y%m%d')
+                    df['Time'] = format_time_column(df['Time'])
+
+                    print(f"最终日期样例:\n{df['Date'].head()}")
+
+                except Exception as e:
+                    print(f"日期格式化错误: {e}")
+                    print(f"样例数据:\n{df[['Date', 'Time']].head()}")
+                    traceback.print_exc()
+                    return
             else:
                 raise ValueError(f"DCSSZCGQ数据列数不足: {df.shape[1]}")
-        
+
         elif data_type == 'aop':
             if df.shape[1] >= 1570:
-                df = df.iloc[:, [0, 1, 1117, 1148, 1195, 1225, 1270, 1325, 1370, 1386, 1410, 1450.1570]]
-                df.columns = ['Date', 'Time', 'Rrs412', 'Rrs443', 'Rrs490', 'Rrs520', 
-                            'Rrs565', 'Rrs620','Rrs665', 'Rrs681', 'Rrs705','Rrs745','Rrs865']
-                df['nLw'] = df['Rrs565'] * 179.363
+                df = df.iloc[:, [0, 1, 1116, 1147, 1194, 1224, 1269, 1374, 1454, 1569]]
+                df.columns = ['Date', 'Time', 'Rrs412', 'Rrs443', 'Rrs490', 'Rrs520',
+                            'Rrs565', 'Rrs670', 'Rrs750', 'Rrs865']
+
+                # 添加调试输出
+                print(f"\n调试信息 - {data_type}:")
+                print(f"原始日期列样例:\n{df['Date'].head()}")
+
+                # 格式化日期和时间
+                try:
+                    df['Date'] = df['Date'].astype(str).str.replace('-', '').str.replace('/', '').str.strip()
+                    df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
+                    df = df.dropna(subset=['Date'])
+
+                    if df.empty:
+                        print(f"警告：{data_type} 数据所有日期解析失败，跳过处理")
+                        return
+
+                    df['Date'] = df['Date'].dt.strftime('%Y%m%d')
+                    df['Time'] = format_time_column(df['Time'])
+                    df['nLw'] = df['Rrs565'] * 179.363
+                    print(f"最终日期样例:\n{df['Date'].head()}")
+                except Exception as e:
+                    print(f"日期格式化错误: {e}")
+                    traceback.print_exc()
+                    return
             else:
-                raise ValueError(f"WQP数据列数不足: {df.shape[1]}")
-                
+                raise ValueError(f"AOP数据列数不足: {df.shape[1]}")
+
         elif data_type == 'aot':
             # 处理气溶胶光学厚度数据
             if df.shape[1] >= 12:
                 df = df.iloc[:, [0, 1, 7, 11]]
                 df.columns = ['Date', 'Time', 'AOT', 'Flag']
-                df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y%m%d')
-                df['Time'] = pd.to_datetime(df['Time'], format='%H:%M:%S').dt.strftime('%H%M%S')
+
+                # 添加调试输出
+                print(f"\n调试信息 - {data_type}:")
+                print(f"原始日期列样例:\n{df['Date'].head()}")
+                print(f"日期列数据类型: {df['Date'].dtype}")
+
+                try:
+                    # 先转换为字符串并清理格式
+                    df['Date'] = df['Date'].astype(str).str.replace('-', '').str.replace('/', '').str.replace(' ', '').str.strip()
+                    print(f"清理后日期样例:\n{df['Date'].head()}")
+
+                    # 尝试转换为日期
+                    df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
+
+                    # 统计有效日期
+                    valid_count = df['Date'].notna().sum()
+                    total_count = len(df)
+                    print(f"有效日期数量: {valid_count}/{total_count}")
+
+                    df = df.dropna(subset=['Date'])
+
+                    if df.empty:
+                        print(f"警告：{data_type} 数据所有日期解析失败，跳过处理")
+                        return
+
+                    df['Date'] = df['Date'].dt.strftime('%Y%m%d')
+                    df['Time'] = format_time_column(df['Time'])
+                    print(f"最终日期样例:\n{df['Date'].head()}")
+
+                except Exception as e:
+                    print(f"日期格式化错误: {e}")
+                    traceback.print_exc()
+                    return
             else:
                 raise ValueError(f"AOT数据列数不足: {df.shape[1]}")
-                
+
         elif data_type == 'wycgq':
-            # 处理温盐传感器数据 (温度)
-            if df.shape[1] >= 4:
-                df = df.iloc[:, [0, 1, 3]]
+            # 处理温盐传感器数据
+            if df.shape[1] >= 3:
+                df = df.iloc[:, [0, 1, 2]]
                 df.columns = ['Date', 'Time', 'SST']
-                df = df.dropna(subset=['SST'])
+
+                # 添加调试输出
+                print(f"\n调试信息 - {data_type}:")
+                print(f"原始日期列样例:\n{df['Date'].head()}")
+                print(f"日期列数据类型: {df['Date'].dtype}")
+
+                try:
+                    # 先转换为字符串并清理格式
+                    df['Date'] = df['Date'].astype(str).str.replace('-', '').str.replace('/', '').str.replace(' ', '').str.strip()
+                    print(f"清理后日期样例:\n{df['Date'].head()}")
+
+                    # 尝试转换为日期
+                    df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d', errors='coerce')
+
+                    # 统计有效日期
+                    valid_count = df['Date'].notna().sum()
+                    total_count = len(df)
+                    print(f"有效日期数量: {valid_count}/{total_count}")
+
+                    df = df.dropna(subset=['Date', 'SST'])
+
+                    if df.empty:
+                        print(f"警告：{data_type} 数据所有日期解析失败，跳过处理")
+                        return
+
+                    df['Date'] = df['Date'].dt.strftime('%Y%m%d')
+                    df['Time'] = format_time_column(df['Time'])
+                    print(f"最终日期样例:\n{df['Date'].head()}")
+
+                except Exception as e:
+                    print(f"日期格式化错误: {e}")
+                    traceback.print_exc()
+                    return
             else:
                 raise ValueError(f"WYCGQ数据列数不足: {df.shape[1]}")
 
         df = df.dropna()
-        
+
         # 保存处理后的数据
         for date, group in df.groupby('Date'):
             if data_type == 'dcsszcgq':
@@ -790,7 +932,7 @@ def process_xc_check_data(default_lat, default_lon, aopres_file, dcsszcgq_file, 
                         f.write(f"Longitude: {header_info['lon']}\n")
                         f.write("Data:\n")
                     group[['Date', 'Time', col_name]].to_csv(output_file, mode='a',
-                                                           index=False, sep='\t')   
+                                                           index=False, sep='\t')
             elif data_type == 'aop':
                 #处理遥感反射率数据
                 params = [
@@ -799,10 +941,8 @@ def process_xc_check_data(default_lat, default_lon, aopres_file, dcsszcgq_file, 
                     ('Rrs490', 'Rrs490'),
                     ('Rrs520', 'Rrs520'),
                     ('Rrs565', 'Rrs565'),
-                    ('Rrs620', 'Rrs620'),
-                    ('Rrs665', 'Rrs665'),
-                    ('Rrs681', 'Rrs681'),
-                    ('Rrs745', 'Rrs745'),
+                    ('Rrs670', 'Rrs670'),
+                    ('Rrs750', 'Rrs750'),
                     ('Rrs865', 'Rrs865'),
                     ('nLw', 'nLw')
                 ]
@@ -812,7 +952,7 @@ def process_xc_check_data(default_lat, default_lon, aopres_file, dcsszcgq_file, 
                         f.write(f"Latitude: {header_info['lat']}\n")
                         f.write(f"Longitude: {header_info['lon']}\n")
                         f.write("Data:\n")
-                    group[['Date', 'Time', col_name]].to_csv(output_file, mode='a', 
+                    group[['Date', 'Time', col_name]].to_csv(output_file, mode='a',
                                                            index=False, sep='\t')
             elif data_type == 'aot':
                 #处理气溶胶光学厚度数据
@@ -822,9 +962,9 @@ def process_xc_check_data(default_lat, default_lon, aopres_file, dcsszcgq_file, 
                     f.write(f"Longitude: {header_info['lon']}\n")
                     f.write("Data:\n")
                 # 将Date、Time、AOT和Flag列一起写入文件
-                group[['Date', 'Time', 'AOT', 'Flag']].to_csv(output_file, mode='a', 
+                group[['Date', 'Time', 'AOT', 'Flag']].to_csv(output_file, mode='a',
                                                             index=False, sep='\t')
-                
+
             elif data_type == 'wycgq':
                 #处理温度数据
                 params = [
@@ -855,10 +995,10 @@ def process_xc_check_data(default_lat, default_lon, aopres_file, dcsszcgq_file, 
             process_data_file(aot_file, 'aot')
         if wycgq_file:
             process_data_file(wycgq_file, 'wycgq')
-            
+
         print('\n现场检验数据处理完成\n')
         return True
-        
+
     except Exception as e:
         print(f"处理数据时出错: {str(e)}")
         traceback.print_exc()
